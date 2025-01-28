@@ -1,6 +1,6 @@
 # FXML Controller Support README
 
-This extension provides support for FXML controllers in JavaFX projects.
+This VSCode extension provides support for FXML controllers in JavaFX projects.
 
 ## Features
 

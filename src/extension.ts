@@ -71,6 +71,22 @@ async function handleFxmlChange(uri: vscode.Uri) {
 	}
 }
 
+// インデントを計算する関数
+function calculateIndentation(document: vscode.TextDocument, startLine: number, endLine: number): string {
+	const editorConfig = vscode.workspace.getConfiguration('editor', document.uri);
+	const insertSpaces = editorConfig.get<boolean>('insertSpaces', true);
+	const tabSize = editorConfig.get<number>('tabSize', 4);
+	const defaultIndentUnit = insertSpaces ? ' '.repeat(tabSize) : '\t';
+
+	const lines = document.getText().split('\n').slice(startLine, endLine);
+	const indents = lines
+		.map(line => line.match(/^[ \t]*/)?.[0].length || 0)
+		.filter(indent => indent > 0);
+
+	const minIndent = indents.length > 0 ? Math.min(...indents) : 0;
+	return minIndent > 0 ? ' '.repeat(minIndent) : defaultIndentUnit;
+}
+
 // インデントを取得してフィールドを挿入する関数
 function insertFieldWithIndent(
 	document: vscode.TextDocument,
@@ -79,24 +95,7 @@ function insertFieldWithIndent(
 	tagName: string,
 	fxId: string
 ) {
-	// VS Codeの設定からインデント情報を取得
-	const editorConfig = vscode.workspace.getConfiguration('editor', document.uri);
-	const insertSpaces = editorConfig.get<boolean>('insertSpaces', true);
-	const tabSize = editorConfig.get<number>('tabSize', 4);
-	const defaultIndentUnit = insertSpaces ? ' '.repeat(tabSize) : '\t';
-
-	// insertLineから始めて最初の10行から0より大きい最小のインデント値を取得
-	const lines = document.getText().split('\n').slice(insertLine, insertLine + 10);
-	const indents = lines
-		.map(line => line.match(/^[ \t]*/)?.[0].length || 0) // 改行を除外してインデントを取得
-		.filter(indent => indent > 0);
-
-	// デバッグ用にインデント値を出力
-	console.log('## Indent values from insertLine:', indents);
-
-	const minIndent = indents.length > 0 ? Math.min(...indents) : 0;
-	const indentUnit = minIndent > 0 ? ' '.repeat(minIndent) : defaultIndentUnit;
-
+	const indentUnit = calculateIndentation(document, insertLine, insertLine + 10);
 	const insertPosition = new vscode.Position(insertLine, 0);
 	const fieldDeclaration = `${indentUnit}@FXML\n${indentUnit}private ${tagName} ${fxId};\n\n`;
 	edit.insert(document.uri, insertPosition, fieldDeclaration);
@@ -176,6 +175,20 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 					lenses.push(new vscode.CodeLens(range, command));
 				}
 			}
+
+			// Check if the initialize method is missing
+			if (!this.hasInitializeMethod(javaText)) {
+				const classEndLine = this.findClassEndLine(javaText);
+				if (classEndLine !== -1) {
+					const range = new vscode.Range(classEndLine, 0, classEndLine, 0);
+					const command: vscode.Command = {
+						title: "Add public void initialize() method",
+						command: 'fxml-fxid-support.addInitializeMethod',
+						arguments: [document, classEndLine]
+					};
+					lenses.push(new vscode.CodeLens(range, command));
+				}
+			}
 		}
 
 		return lenses;
@@ -220,6 +233,21 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 			}
 		}
 		return -1;
+	}
+
+	private findClassEndLine(javaText: string): number {
+		const lines = javaText.split('\n');
+		for (let i = lines.length - 1; i >= 0; i--) {
+			if (lines[i].trim() === '}') {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private hasInitializeMethod(javaText: string): boolean {
+		const initializePattern = /public\s+void\s+initialize\s*\(\s*\)\s*{/;
+		return initializePattern.test(javaText);
 	}
 }
 
@@ -334,6 +362,22 @@ export function activate(context: vscode.ExtensionContext) {
 				insertFieldWithIndent(document, edit, insertLine, tagName, fxId);
 			});
 
+			vscode.workspace.applyEdit(edit);
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('fxml-fxid-support.addInitializeMethod', (document: vscode.TextDocument, classEndLine: number) => {
+			const edit = new vscode.WorkspaceEdit();
+			const indentUnit = calculateIndentation(document, classEndLine - 10, classEndLine);
+
+			const insertPosition = new vscode.Position(classEndLine, 0);
+			const initializeMethod = `
+${indentUnit}public void initialize() {
+${indentUnit}${indentUnit}// TODO: Add initialization logic here
+${indentUnit}}
+`;
+			edit.insert(document.uri, insertPosition, initializeMethod);
 			vscode.workspace.applyEdit(edit);
 		})
 	);

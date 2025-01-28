@@ -17,11 +17,11 @@
     "commands": [
       {
         "command": "fxml-controller-support.addAllMissingFxIds",
-        "title": "Add All Missing @FXML Fields"
+        "title": "FXML Controller: Add All Missing @FXML Fields"
       },
       {
         "command": "fxml-controller-support.addInitializeMethod",
-        "title": "Add Initialize Method"
+        "title": "FXML Controller: Add initialize()"
       }
     ],
     "languages": [

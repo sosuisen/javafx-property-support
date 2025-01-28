@@ -4,25 +4,21 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
-
-
 function getControllerFilePath(
 	controllerClassName: string,
 	workspaceRoot: vscode.Uri
 ): string {
-	// 例: com.example.FooController → com/example/FooController.java
+	// com.example.FooController → com/example/FooController.java
 	const parts = controllerClassName.split('.');
 	const fileName = parts.pop() + '.java';
 	const dirPath = parts.join('/');
 
-	// src/main/java/com/example/FooController.java のUriを作る例
+	// src/main/java/com/example/FooController.java
 	const fullPath = vscode.Uri.joinPath(workspaceRoot, 'src', 'main', 'java', dirPath, fileName);
 	return fullPath.fsPath;
 }
 
 function hasField(javaText: string, fxId: string): boolean {
-	// 例: @FXML (改行や空白が入りうる) private (任意の型) fxId ;
-	// 正規表現には注意が必要だが、とりあえず単純に
 	const pattern = new RegExp(`@FXML\\s+private\\s+\\S+\\s+${fxId}\\s*;`);
 	return pattern.test(javaText);
 }
@@ -33,7 +29,7 @@ interface FxmlFileInfo {
 	path: string;
 }
 
-// FXMLファイルのデータを保持するオブジェクトを関数の外に宣言
+
 const fxmlData: Record<string, { workspaceFolder: vscode.WorkspaceFolder, controllerFilePath: string | null, controllerClassName: string | null, elements: Array<{ tagName: string, fxId: string }> }> = {};
 
 function parseFxmlFile(fxmlFileInfo: FxmlFileInfo): { controllerFilePath: string | null, controllerClassName: string | null, elements: Array<{ tagName: string, fxId: string }> } {
@@ -63,13 +59,10 @@ function parseFxmlFile(fxmlFileInfo: FxmlFileInfo): { controllerFilePath: string
 async function handleFxmlChange(uri: vscode.Uri) {
 	const filePath = uri.fsPath;
 
-	// src以下にないファイルはスキップ
 	if (!filePath.includes('src')) {
 		console.log(`## Skipping non-src FXML file: ${filePath}`);
 		return;
 	}
-
-	console.log(`## FXML file changed: ${filePath}`);
 
 	try {
 		const fileData = parseFxmlFile({ workspaceFolder: fxmlData[filePath].workspaceFolder, path: filePath });
@@ -77,13 +70,11 @@ async function handleFxmlChange(uri: vscode.Uri) {
 			workspaceFolder: fxmlData[filePath].workspaceFolder,
 			...fileData
 		};
-		console.log(`## Updated FXML Data for ${filePath}:`, fileData);
 	} catch (error) {
 		console.error(`Error parsing FXML file ${filePath}:`, error);
 	}
 }
 
-// インデントを計算する関数
 function calculateIndentation(document: vscode.TextDocument, startLine: number, endLine: number): string {
 	const editorConfig = vscode.workspace.getConfiguration('editor', document.uri);
 	const insertSpaces = editorConfig.get<boolean>('insertSpaces', true);
@@ -99,7 +90,6 @@ function calculateIndentation(document: vscode.TextDocument, startLine: number, 
 	return minIndent > 0 ? ' '.repeat(minIndent) : defaultIndentUnit;
 }
 
-// インデントを取得してフィールドを挿入する関数
 function insertFieldWithIndent(
 	document: vscode.TextDocument,
 	edit: vscode.WorkspaceEdit,
@@ -121,7 +111,7 @@ function getTagNameFromFxId(fxId: string): string {
 			return element.tagName;
 		}
 	}
-	return "Node"; // デフォルトの型
+	return "Node";
 }
 
 class MissingFxIdProvider implements vscode.CodeActionProvider {
@@ -142,20 +132,17 @@ class MissingFxIdProvider implements vscode.CodeActionProvider {
 		const fxIdMatch = diagnostic.message.match(/fx:id="([^"]+)"/);
 		const fxId = fxIdMatch ? fxIdMatch[1] : 'unknown';
 
-		// タグ名を取得するために、fxmlDataからfx:idに対応するタグ名を取得
 		const tagName = getTagNameFromFxId(fxId);
 
 		const fix = new vscode.CodeAction(`Add @FXML field for ${fxId}`, vscode.CodeActionKind.QuickFix);
 		fix.edit = new vscode.WorkspaceEdit();
 
-		// インデントを取得してフィールドを挿入する
 		insertFieldWithIndent(document, fix.edit, diagnostic.range.start.line, tagName, fxId);
 
 		fix.diagnostics = [diagnostic];
 		fix.isPreferred = true;
 		return fix;
 	}
-
 }
 
 function getFxmlByControllerUri(uri: vscode.Uri): string | null {
@@ -204,14 +191,11 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 		const lenses: vscode.CodeLens[] = [];
 		const javaText = document.getText();
 
-		// 現在のドキュメントがFXMLのControllerに対応しているか確認
 		const fxmlPath = getFxmlByControllerUri(document.uri);
 		if (fxmlPath) {
-			// FXMLに存在するがJava側にないフィールドを探す
 			const missingFxIds = findMissingFxIds(javaText, fxmlPath);
 
 			if (missingFxIds.length > 0) {
-				// クラス宣言の直後にCodeLensを追加
 				const classDeclarationLine = this.findClassDeclarationLine(javaText);
 				if (classDeclarationLine !== -1) {
 					const range = new vscode.Range(classDeclarationLine + 1, 0, classDeclarationLine + 1, 0);
@@ -224,7 +208,6 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 				}
 			}
 
-			// Check if the initialize method is missing
 			if (!this.hasInitializeMethod(javaText)) {
 				const classEndLine = findClassEndLine(javaText);
 				if (classEndLine !== -1) {
@@ -264,7 +247,6 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-	console.log('## activate: fxml-fxid-support');
 
 	const workspaceFolders = vscode.workspace.workspaceFolders;
 	if (!workspaceFolders) {
@@ -272,13 +254,11 @@ export function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
-	// fxmlListの型を定義
 	interface FxmlFileInfo {
 		workspaceFolder: vscode.WorkspaceFolder;
 		path: string;
 	}
 
-	// 配列をオブジェクトの配列に変更
 	const fxmlList: FxmlFileInfo[] = [];
 
 	function findFxmlFiles(wsFolder: vscode.WorkspaceFolder, dir: string) {
@@ -297,24 +277,17 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
-	// Iterate over each workspace folder and find FXML files
 	workspaceFolders.forEach(folder => {
 		const srcDir = path.join(folder.uri.fsPath, 'src');
-		console.log(`## Searching FXML files in: ${srcDir}`);
 		findFxmlFiles(folder, srcDir);
 	});
 
-	console.log('## FXML Files:', fxmlList);
-
-	// Parse FXML files and store tag names and fx:ids
 	fxmlList.forEach(fxmlInfo => {
 		fxmlData[fxmlInfo.path] = {
 			workspaceFolder: fxmlInfo.workspaceFolder,
 			...parseFxmlFile(fxmlInfo)
 		};
 	});
-
-	console.log('## Parsed FXML Data:', fxmlData);
 
 	// Create a FileSystemWatcher for *.fxml files
 	const fxmlWatcher = vscode.workspace.createFileSystemWatcher('**/*.fxml');
@@ -328,16 +301,13 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	fxmlWatcher.onDidDelete(uri => {
 		const filePath = uri.fsPath;
-		console.log(`## FXML file deleted: ${filePath}`);
 		const index = fxmlList.findIndex(item => item.path === filePath);
 		if (index !== -1) {
 			fxmlList.splice(index, 1);
 			delete fxmlData[filePath];
-			console.log(`## Removed ${filePath} from fxmlList and fxmlData`);
 		}
 	});
 
-	// Process all currently open documents
 	vscode.workspace.textDocuments.forEach(document => {
 		if (document.languageId === 'java') {
 			processJavaDocument(document);
@@ -350,7 +320,6 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	// Run processJavaDocument when a .java file is changed
 	vscode.workspace.onDidChangeTextDocument(event => {
 		const document = event.document;
 		if (document.languageId === 'java') {
@@ -446,7 +415,6 @@ ${indentUnit}}
 	context.subscriptions.push(fxmlWatcher);
 }
 
-// DiagnosticCollectionを関数の外で宣言して、再利用可能にする
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('fxml');
 
 function processJavaDocument(document: vscode.TextDocument) {
@@ -461,7 +429,6 @@ function processJavaDocument(document: vscode.TextDocument) {
 		const javaText = document.getText();
 		const diagnostics: vscode.Diagnostic[] = [];
 
-		// FXMLに存在しない@FXIdフィールドの診断を追加
 		const fxIdPattern = /@FXML\s+private\s+\S+\s+(\w+)\s*;/g;
 		let match;
 		while ((match = fxIdPattern.exec(javaText)) !== null) {
@@ -477,12 +444,10 @@ function processJavaDocument(document: vscode.TextDocument) {
 			}
 		}
 
-		// FXMLに存在しないフィールドの診断を追加
 		data.elements.forEach(element => {
 			if (!hasField(javaText, element.fxId)) {
 				const message = `Missing @FXML field for fx:id="${element.fxId}"`;
 
-				// 推測されるフィールドの位置を決定
 				const lines = javaText.split('\n');
 				let insertLine = 0;
 				for (let i = 0; i < lines.length; i++) {
@@ -498,7 +463,6 @@ function processJavaDocument(document: vscode.TextDocument) {
 			}
 		});
 
-		// 診断を設定する前に、既存の診断をクリア
 		diagnosticCollection.delete(document.uri);
 		diagnosticCollection.set(document.uri, diagnostics);
 	}

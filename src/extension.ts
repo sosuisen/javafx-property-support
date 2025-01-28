@@ -53,6 +53,13 @@ function parseFxmlFile(filePath: string): { controller: string | null, elements:
 
 async function handleFxmlChange(uri: vscode.Uri) {
 	const filePath = uri.fsPath;
+
+	// src以下にないファイルはスキップ
+	if (!filePath.includes('src')) {
+		console.log(`## Skipping non-src FXML file: ${filePath}`);
+		return;
+	}
+
 	console.log(`## FXML file changed: ${filePath}`);
 
 	try {
@@ -62,6 +69,48 @@ async function handleFxmlChange(uri: vscode.Uri) {
 	} catch (error) {
 		console.error(`Error parsing FXML file ${filePath}:`, error);
 	}
+}
+
+// インデントを取得してフィールドを挿入する関数
+function insertFieldWithIndent(
+	document: vscode.TextDocument,
+	edit: vscode.WorkspaceEdit,
+	insertLine: number,
+	tagName: string,
+	fxId: string
+) {
+	// VS Codeの設定からインデント情報を取得
+	const editorConfig = vscode.workspace.getConfiguration('editor', document.uri);
+	const insertSpaces = editorConfig.get<boolean>('insertSpaces', true);
+	const tabSize = editorConfig.get<number>('tabSize', 4);
+	const defaultIndentUnit = insertSpaces ? ' '.repeat(tabSize) : '\t';
+
+	// insertLineから始めて最初の10行から0より大きい最小のインデント値を取得
+	const lines = document.getText().split('\n').slice(insertLine, insertLine + 10);
+	const indents = lines
+		.map(line => line.match(/^[ \t]*/)?.[0].length || 0) // 改行を除外してインデントを取得
+		.filter(indent => indent > 0);
+
+	// デバッグ用にインデント値を出力
+	console.log('## Indent values from insertLine:', indents);
+
+	const minIndent = indents.length > 0 ? Math.min(...indents) : 0;
+	const indentUnit = minIndent > 0 ? ' '.repeat(minIndent) : defaultIndentUnit;
+
+	const insertPosition = new vscode.Position(insertLine, 0);
+	const fieldDeclaration = `${indentUnit}@FXML\n${indentUnit}private ${tagName} ${fxId};\n\n`;
+	edit.insert(document.uri, insertPosition, fieldDeclaration);
+}
+
+
+function getTagNameFromFxId(fxId: string): string {
+	for (const data of Object.values(fxmlData)) {
+		const element = data.elements.find(el => el.fxId === fxId);
+		if (element) {
+			return element.tagName;
+		}
+	}
+	return "Node"; // デフォルトの型
 }
 
 class MissingFxIdProvider implements vscode.CodeActionProvider {
@@ -83,55 +132,100 @@ class MissingFxIdProvider implements vscode.CodeActionProvider {
 		const fxId = fxIdMatch ? fxIdMatch[1] : 'unknown';
 
 		// タグ名を取得するために、fxmlDataからfx:idに対応するタグ名を取得
-		const tagName = this.getTagNameFromFxId(fxId);
+		const tagName = getTagNameFromFxId(fxId);
 
 		const fix = new vscode.CodeAction(`Add @FXML field for ${fxId}`, vscode.CodeActionKind.QuickFix);
 		fix.edit = new vscode.WorkspaceEdit();
 
-		// VS Codeの設定からインデント情報を取得
-		const editorConfig = vscode.workspace.getConfiguration('editor', document.uri);
-		const insertSpaces = editorConfig.get<boolean>('insertSpaces', true);
-		const tabSize = editorConfig.get<number>('tabSize', 4);
-		const defaultIndentUnit = insertSpaces ? ' '.repeat(tabSize) : '\t';
+		// インデントを取得してフィールドを挿入する
+		insertFieldWithIndent(document, fix.edit, diagnostic.range.start.line, tagName, fxId);
 
-		// フィールドを挿入する位置を決定
-		const insertLine = diagnostic.range.start.line;
-
-		// insertLineから始めて最初の10行から0より大きい最小のインデント値を取得
-		const lines = document.getText().split('\n').slice(insertLine, insertLine + 10);
-		const indents = lines
-			.map(line => line.match(/^[ \t]*/)?.[0].length || 0) // 改行を除外してインデントを取得
-			.filter(indent => indent > 0);
-
-		// デバッグ用にインデント値を出力
-		console.log('## Indent values from insertLine:', indents);
-
-		const minIndent = indents.length > 0 ? Math.min(...indents) : 0;
-		const indentUnit = minIndent > 0 ? ' '.repeat(minIndent) : defaultIndentUnit;
-
-		const insertPosition = new vscode.Position(insertLine, 0);
-		const fieldDeclaration = `${indentUnit}@FXML\n${indentUnit}private ${tagName} ${fxId};\n\n`;
-		fix.edit.insert(document.uri, insertPosition, fieldDeclaration);
 		fix.diagnostics = [diagnostic];
 		fix.isPreferred = true;
 		return fix;
 	}
 
-	private getTagNameFromFxId(fxId: string): string {
-		for (const data of Object.values(fxmlData)) {
-			const element = data.elements.find(el => el.fxId === fxId);
-			if (element) {
-				return element.tagName;
+}
+
+class MissingFxIdLensProvider implements vscode.CodeLensProvider {
+	private workspaceRoot: vscode.Uri;
+
+	constructor(workspaceRoot: vscode.Uri) {
+		this.workspaceRoot = workspaceRoot;
+	}
+
+	public provideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.CodeLens[] {
+		const lenses: vscode.CodeLens[] = [];
+		const javaText = document.getText();
+
+		// 現在のドキュメントがFXMLのControllerに対応しているか確認
+		if (this.isControllerDocument(document.uri)) {
+			// FXMLに存在するがJava側にないフィールドを探す
+			const missingFxIds = this.findMissingFxIds(javaText, document.uri);
+
+			if (missingFxIds.length > 0) {
+				// クラス宣言の直後にCodeLensを追加
+				const classDeclarationLine = this.findClassDeclarationLine(javaText);
+				if (classDeclarationLine !== -1) {
+					const range = new vscode.Range(classDeclarationLine + 1, 0, classDeclarationLine + 1, 0);
+					const command: vscode.Command = {
+						title: `Add all missing @FXML fields (${missingFxIds.length})`,
+						command: 'fxml-fxid-support.addAllMissingFxIds',
+						arguments: [document, missingFxIds]
+					};
+					lenses.push(new vscode.CodeLens(range, command));
+				}
 			}
 		}
-		return "Node"; // デフォルトの型
+
+		return lenses;
+	}
+
+	private isControllerDocument(uri: vscode.Uri): boolean {
+		for (const data of Object.values(fxmlData)) {
+			const controllerPath = getControllerJavaUri(data.controller!, this.workspaceRoot).fsPath;
+			if (controllerPath === uri.fsPath) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private findMissingFxIds(javaText: string, uri: vscode.Uri): string[] {
+		const missingFxIds: string[] = [];
+		for (const [fxmlPath, data] of Object.entries(fxmlData)) {
+			const controllerPath = uri.fsPath;
+
+			// デバッグ用にパスを出力
+			console.log('## FXML Path:', fxmlPath);
+			console.log('## Controller Path:', controllerPath);
+			console.log('## Current Document Path:', uri.fsPath);
+
+			if (controllerPath === uri.fsPath) {
+				data.elements.forEach(element => {
+					if (!hasField(javaText, element.fxId)) {
+						missingFxIds.push(element.fxId);
+					}
+				});
+			}
+		}
+		return missingFxIds;
+	}
+
+	private findClassDeclarationLine(javaText: string): number {
+		const lines = javaText.split('\n');
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].includes('class ')) {
+				return i;
+			}
+		}
+		return -1;
 	}
 }
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-	// 既存のコード...
 	console.log('## activate: fxml-fxid-support');
 
 	const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -152,7 +246,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const stat = fs.statSync(fullPath);
 			if (stat.isDirectory()) {
 				findFxmlFiles(fullPath);
-			} else if (file.endsWith('.fxml')) {
+			} else if (file.endsWith('.fxml') && fullPath.includes('src')) {
 				fxmlList.push(fullPath);
 			}
 		}
@@ -218,6 +312,32 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	context.subscriptions.push(
+		vscode.languages.registerCodeLensProvider('java', new MissingFxIdLensProvider(workspaceFolders[0].uri))
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('fxml-fxid-support.addAllMissingFxIds', (document: vscode.TextDocument, missingFxIds: string[]) => {
+			const edit = new vscode.WorkspaceEdit();
+
+			const lines = document.getText().split('\n');
+			let insertLine = 0;
+			for (let i = 0; i < lines.length; i++) {
+				if (lines[i].includes("class ")) {
+					insertLine = i + 1;
+					break;
+				}
+			}
+
+			missingFxIds.forEach(fxId => {
+				const tagName = getTagNameFromFxId(fxId);
+				insertFieldWithIndent(document, edit, insertLine, tagName, fxId);
+			});
+
+			vscode.workspace.applyEdit(edit);
+		})
+	);
+
 	context.subscriptions.push(fxmlWatcher);
 }
 
@@ -229,6 +349,11 @@ function processJavaDocument(document: vscode.TextDocument, workspaceUri: vscode
 	for (const [fxmlPath, data] of Object.entries(fxmlData)) {
 		if (data.controller) {
 			const controllerPath = getControllerJavaUri(data.controller, workspaceUri).fsPath;
+
+			// デバッグ用にパスを出力
+			console.log('## Controller Path:', controllerPath);
+			console.log('## Opened File Path:', openedFilePath);
+
 			if (controllerPath === openedFilePath) {
 				console.log(`## Opened Java file matches fx:controller:`);
 				console.log(`FXML Path: ${fxmlPath}`);

@@ -158,9 +158,10 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 		const javaText = document.getText();
 
 		// 現在のドキュメントがFXMLのControllerに対応しているか確認
-		if (this.isControllerDocument(document.uri)) {
+		const fxmlPath = this.getFxmlByControllerUri(document.uri);
+		if (fxmlPath) {
 			// FXMLに存在するがJava側にないフィールドを探す
-			const missingFxIds = this.findMissingFxIds(javaText, document.uri);
+			const missingFxIds = this.findMissingFxIds(javaText, fxmlPath);
 
 			if (missingFxIds.length > 0) {
 				// クラス宣言の直後にCodeLensを追加
@@ -169,7 +170,7 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 					const range = new vscode.Range(classDeclarationLine + 1, 0, classDeclarationLine + 1, 0);
 					const command: vscode.Command = {
 						title: `Add all missing @FXML fields (${missingFxIds.length})`,
-						command: 'fxml-fxid-support.addAllMissingFxIds',
+						command: 'fxml-controller-support.addAllMissingFxIds',
 						arguments: [document, missingFxIds]
 					};
 					lenses.push(new vscode.CodeLens(range, command));
@@ -183,7 +184,7 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 					const range = new vscode.Range(classEndLine, 0, classEndLine, 0);
 					const command: vscode.Command = {
 						title: "Add public void initialize() method",
-						command: 'fxml-fxid-support.addInitializeMethod',
+						command: 'fxml-controller-support.addInitializeMethod',
 						arguments: [document, classEndLine]
 					};
 					lenses.push(new vscode.CodeLens(range, command));
@@ -194,33 +195,27 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 		return lenses;
 	}
 
-	private isControllerDocument(uri: vscode.Uri): boolean {
-		for (const data of Object.values(fxmlData)) {
-			const controllerPath = getControllerJavaUri(data.controller!, this.workspaceRoot).fsPath;
-			if (controllerPath === uri.fsPath) {
-				return true;
+	private getFxmlByControllerUri(uri: vscode.Uri): string | null {
+		for (const [fxmlPath, data] of Object.entries(fxmlData)) {
+			if (data.controller) {
+				const controllerPath = getControllerJavaUri(data.controller, this.workspaceRoot).fsPath;
+				if (controllerPath === uri.fsPath) {
+					return fxmlPath;
+				}
 			}
 		}
-		return false;
+		return null;
 	}
 
-	private findMissingFxIds(javaText: string, uri: vscode.Uri): string[] {
+	private findMissingFxIds(javaText: string, fxmlPath: string): string[] {
 		const missingFxIds: string[] = [];
-		for (const [fxmlPath, data] of Object.entries(fxmlData)) {
-			const controllerPath = uri.fsPath;
-
-			// デバッグ用にパスを出力
-			console.log('## FXML Path:', fxmlPath);
-			console.log('## Controller Path:', controllerPath);
-			console.log('## Current Document Path:', uri.fsPath);
-
-			if (controllerPath === uri.fsPath) {
-				data.elements.forEach(element => {
-					if (!hasField(javaText, element.fxId)) {
-						missingFxIds.push(element.fxId);
-					}
-				});
-			}
+		const fxmlInfo = fxmlData[fxmlPath];
+		if (fxmlInfo) {
+			fxmlInfo.elements.forEach(element => {
+				if (!hasField(javaText, element.fxId)) {
+					missingFxIds.push(element.fxId);
+				}
+			});
 		}
 		return missingFxIds;
 	}
@@ -345,7 +340,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('fxml-fxid-support.addAllMissingFxIds', (document: vscode.TextDocument, missingFxIds: string[]) => {
+		vscode.commands.registerCommand('fxml-controller-support.addAllMissingFxIds', (document: vscode.TextDocument, missingFxIds: string[]) => {
 			const edit = new vscode.WorkspaceEdit();
 
 			const lines = document.getText().split('\n');
@@ -367,7 +362,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('fxml-fxid-support.addInitializeMethod', (document: vscode.TextDocument, classEndLine: number) => {
+		vscode.commands.registerCommand('fxml-controller-support.addInitializeMethod', (document: vscode.TextDocument, classEndLine: number) => {
 			const edit = new vscode.WorkspaceEdit();
 			const indentUnit = calculateIndentation(document, classEndLine - 10, classEndLine);
 

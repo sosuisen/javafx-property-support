@@ -1,8 +1,8 @@
 {
-  "name": "fxml-fxid-support",
-  "displayName": "fxml-fxid-support",
-  "description": "",
-  "version": "0.0.1",
+  "name": "fxml-controller-support",
+  "displayName": "JavaFX Controller Support",
+  "publisher": "your-publisher-name",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.96.0"
   },
@@ -16,8 +16,31 @@
   "contributes": {
     "commands": [
       {
-        "command": "fxml-fxid-support.helloWorld",
-        "title": "Hello World"
+        "command": "fxml-controller-support.addAllMissingFxIds",
+        "title": "Add All Missing @FXML Fields"
+      },
+      {
+        "command": "fxml-controller-support.addInitializeMethod",
+        "title": "Add Initialize Method"
+      }
+    ],
+    "languages": [
+      {
+        "id": "java",
+        "extensions": [
+          ".java"
+        ],
+        "aliases": [
+          "Java",
+          "java"
+        ]
+      }
+    ],
+    "codeActions": [
+      {
+        "language": "java",
+        "kind": "quickfix",
+        "title": "Add Missing @FXML Fields"
       }
     ]
   },

@@ -1,7 +1,7 @@
 {
   "name": "javafx-controller-support",
   "displayName": "JavaFX Controller Support",
-  "publisher": "your-publisher-name",
+  "publisher": "sosuisha",
   "version": "1.0.0",
   "engines": {
     "vscode": "^1.96.0"

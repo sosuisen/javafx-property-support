@@ -1,5 +1,5 @@
 {
-  "name": "fxml-controller-support",
+  "name": "javafx-controller-support",
   "displayName": "JavaFX Controller Support",
   "publisher": "your-publisher-name",
   "version": "1.0.0",
@@ -16,12 +16,12 @@
   "contributes": {
     "commands": [
       {
-        "command": "fxml-controller-support.addAllMissingFxIds",
-        "title": "FXML Controller: Add All Missing @FXML Fields"
+        "command": "javafx-controller-support.addAllMissingFxIds",
+        "title": "JavaFX Controller: Add All Missing @FXML Fields"
       },
       {
-        "command": "fxml-controller-support.addInitializeMethod",
-        "title": "FXML Controller: Add initialize()"
+        "command": "javafx-controller-support.addInitializeMethod",
+        "title": "JavaFX Controller: Add initialize()"
       }
     ],
     "languages": [

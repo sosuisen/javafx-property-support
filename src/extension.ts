@@ -201,7 +201,7 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 					const range = new vscode.Range(classDeclarationLine + 1, 0, classDeclarationLine + 1, 0);
 					const command: vscode.Command = {
 						title: `Add all missing @FXML fields (${missingFxIds.length})`,
-						command: 'fxml-controller-support.addAllMissingFxIds',
+						command: 'javafx-controller-support.addAllMissingFxIds',
 						arguments: [document, missingFxIds]
 					};
 					lenses.push(new vscode.CodeLens(range, command));
@@ -214,7 +214,7 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 					const range = new vscode.Range(classEndLine, 0, classEndLine, 0);
 					const command: vscode.Command = {
 						title: "Add public void initialize() method",
-						command: 'fxml-controller-support.addInitializeMethod',
+						command: 'javafx-controller-support.addInitializeMethod',
 						arguments: [document, classEndLine]
 					};
 					lenses.push(new vscode.CodeLens(range, command));
@@ -341,7 +341,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('fxml-controller-support.addAllMissingFxIds', (document: vscode.TextDocument | undefined, missingFxIds: string[]) => {
+		vscode.commands.registerCommand('javafx-controller-support.addAllMissingFxIds', (document: vscode.TextDocument | undefined, missingFxIds: string[]) => {
 			if (!document) {
 				const activeEditor = vscode.window.activeTextEditor;
 				if (!activeEditor) {
@@ -381,7 +381,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('fxml-controller-support.addInitializeMethod', (document: vscode.TextDocument, classEndLine: number) => {
+		vscode.commands.registerCommand('javafx-controller-support.addInitializeMethod', (document: vscode.TextDocument, classEndLine: number) => {
 			if (!document) {
 				const activeEditor = vscode.window.activeTextEditor;
 				if (!activeEditor) {

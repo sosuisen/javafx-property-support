@@ -40,38 +40,54 @@ function hasFxIdField(javaText: string, fxId: string): boolean {
 	return pattern.test(javaText);
 }
 
-function parseFxmlFile(fxmlFileInfo: FxmlFileInfo): FxmlData {
-	const fxmlContent = fs.readFileSync(fxmlFileInfo.fullPath, 'utf-8');
-	const fxIdRegex = /<(\w+)[^>]*fx:id\s*=\s*"([^"]+)"/g;
-
-	const tagAndFxIds: Array<TagAndFxId> = [];
-
-	let match;
-	// g flag is used to find all matches
-	while ((match = fxIdRegex.exec(fxmlContent)) !== null) {
-		const tagName = match[1];
-		const fxId = match[2];
-		tagAndFxIds.push({ tagName, fxId });
-	}
-
-	const controllerRegex = /fx:controller\s*=\s*"([^"]+)"/;
-	const controllerMatch = controllerRegex.exec(fxmlContent);
-	const controllerClassName = controllerMatch ? controllerMatch[1] : null;
-	let controllerFilePath: string | null = null;
-	if (controllerClassName) {
-		controllerFilePath = getControllerFilePath(controllerClassName, fxmlFileInfo.workspaceFolder.uri);
-	}
-
-	return { ...fxmlFileInfo, controllerClassName, controllerFilePath, tagAndFxIds };
-}
-
-function handleFxmlChange(uri: vscode.Uri) {
-	const fileFullPath = uri.fsPath;
-
+function processFxmlFile(fullPath: string) {
 	try {
-		fxmlDictionary[fileFullPath] = parseFxmlFile({ workspaceFolder: fxmlDictionary[fileFullPath].workspaceFolder, fullPath: fileFullPath });
+		const fxmlContent = fs.readFileSync(fullPath, 'utf-8');
+		let workspaceFolder: vscode.WorkspaceFolder | undefined;
+		if (fxmlDictionary[fullPath]) {
+			workspaceFolder = fxmlDictionary[fullPath].workspaceFolder;
+		}
+		else {
+			workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(fullPath));
+		}
+		if (!workspaceFolder) {
+			console.error(`No workspace folder found for ${fullPath}`);
+			return;
+		}
+
+		const controllerRegex = /fx:controller\s*=\s*"([^"]+)"/;
+		const controllerMatch = controllerRegex.exec(fxmlContent);
+		const controllerClassName = controllerMatch ? controllerMatch[1] : null;
+		let controllerFilePath: string | null = null;
+		if (controllerClassName) {
+			controllerFilePath = getControllerFilePath(controllerClassName, workspaceFolder.uri);
+		}
+		else {
+			console.error(`No fx:controller for ${fullPath}`);
+			return;
+		}
+
+		const fxIdRegex = /<(\w+)[^>]*fx:id\s*=\s*"([^"]+)"/g;
+
+		const tagAndFxIds: Array<TagAndFxId> = [];
+
+		let match;
+		// g flag is used to find all matches
+		while ((match = fxIdRegex.exec(fxmlContent)) !== null) {
+			const tagName = match[1];
+			const fxId = match[2];
+			tagAndFxIds.push({ tagName, fxId });
+		}
+
+		fxmlDictionary[fullPath] = {
+			workspaceFolder,
+			fullPath,
+			controllerFilePath,
+			controllerClassName,
+			tagAndFxIds,
+		};
 	} catch (error) {
-		console.error(`Error parsing FXML file ${fileFullPath}:`, error);
+		console.error(`Error parsing FXML file ${fullPath}:`, error);
 	}
 }
 
@@ -132,7 +148,7 @@ class MissingFxIdProvider implements vscode.CodeActionProvider {
 
 		const fix = new vscode.CodeAction(`Add @FXML field for ${fxId}`, vscode.CodeActionKind.QuickFix);
 
-		const fxmlPath = getFxmlByControllerUri(document.uri);
+		const fxmlPath = getFxmlByControllerFilePath(document.uri.fsPath);
 		if (!fxmlPath) {
 			console.error(`No corresponding FXML file found for ${document.uri.fsPath}`);
 			return fix;
@@ -150,9 +166,9 @@ class MissingFxIdProvider implements vscode.CodeActionProvider {
 	}
 }
 
-function getFxmlByControllerUri(uri: vscode.Uri): string | null {
+function getFxmlByControllerFilePath(fullPath: string): string | null {
 	for (const [fxmlPath, data] of Object.entries(fxmlDictionary)) {
-		if (data.controllerFilePath === uri.fsPath) {
+		if (data.controllerFilePath === fullPath) {
 			return fxmlPath;
 		}
 	}
@@ -192,13 +208,13 @@ function findClassEndLine(javaText: string): number {
 	return -1;
 }
 
-class MissingFxIdLensProvider implements vscode.CodeLensProvider {
+class ControllerSupportLensProvider implements vscode.CodeLensProvider {
 
 	public provideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.CodeLens[] {
 		const lenses: vscode.CodeLens[] = [];
 		const javaText = document.getText();
 
-		const fxmlPath = getFxmlByControllerUri(document.uri);
+		const fxmlPath = getFxmlByControllerFilePath(document.uri.fsPath);
 		if (fxmlPath) {
 			const missingTagAndFxIds = findMissingTagAndFxIds(javaText, fxmlPath);
 
@@ -238,81 +254,74 @@ class MissingFxIdLensProvider implements vscode.CodeLensProvider {
 	}
 }
 
+function checkAllFxmlFiles() {
+	vscode.workspace.findFiles("src/**/*.fxml").then(files => {
+		files.forEach(uri => {
+			processFxmlFile(uri.fsPath);
+		});
+	});
+}
+
+function checkAllOpenedJavaFiles() {
+	vscode.workspace.textDocuments.forEach(document => {
+		if (document.languageId === 'java') {
+			processJavaFileByTextDocument(document);
+		}
+	});
+}
+
 // This method is called when the extension is activated
 export function activate(context: vscode.ExtensionContext) {
-
 	const workspaceFolders = vscode.workspace.workspaceFolders;
 	if (!workspaceFolders) {
 		console.error('No workspace folder is open.');
 		return;
 	}
-	const fxmlFileInfos: FxmlFileInfo[] = [];
 
-	function findFxmlFiles(wsFolder: vscode.WorkspaceFolder, srcDir: string) {
-		const dirs: string[] = [srcDir];
-		while (dirs.length > 0) {
-			const currentDir = dirs.pop()!;
-			const files = fs.readdirSync(currentDir);
-			for (const file of files) {
-				const fullPath = path.join(currentDir, file);
-				const stat = fs.statSync(fullPath);
-				if (stat.isDirectory()) {
-					dirs.push(fullPath);
-				} else if (file.endsWith('.fxml')) {
-					fxmlFileInfos.push({
-						workspaceFolder: wsFolder,
-						fullPath: fullPath
-					});
-				}
-			}
-		}
-	}
-
-	workspaceFolders.forEach(folder => {
-		const srcDir = path.join(folder.uri.fsPath, 'src');
-		findFxmlFiles(folder, srcDir);
-	});
-
-	fxmlFileInfos.forEach(fxmlFileInfo => {
-		fxmlDictionary[fxmlFileInfo.fullPath] = parseFxmlFile(fxmlFileInfo);
-	});
-
-	// Create a FileSystemWatcher for *.fxml files
-	// .fxml may be in the bin directory. Skip it.
+	/**
+	 * Observe changes of *.fxml files.
+	 */
+	// Check all *.fxml files.
+	checkAllFxmlFiles();
+	// *.fxml files may be in the bin directory. Skip them.
 	const fxmlWatcher = vscode.workspace.createFileSystemWatcher('src/**/*.fxml');
-
+	// Change of *.fxml file is detected when the file is saved.
 	fxmlWatcher.onDidChange(uri => {
-		handleFxmlChange(uri);
+		processFxmlFile(uri.fsPath);
+		checkAllOpenedJavaFiles();
 	});
 	fxmlWatcher.onDidCreate(uri => {
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-		if (!workspaceFolder) {
-			return;
-		}
-		fxmlDictionary[uri.fsPath] = parseFxmlFile({ workspaceFolder, fullPath: uri.fsPath });
+		processFxmlFile(uri.fsPath);
+		checkAllOpenedJavaFiles();
 	});
 	fxmlWatcher.onDidDelete(uri => {
 		delete fxmlDictionary[uri.fsPath];
+		checkAllOpenedJavaFiles();
 	});
 
-	vscode.workspace.textDocuments.forEach(document => {
-		if (document.languageId === 'java') {
-			processJavaDocument(document);
+	/**
+	 * Observe changes of *.java files.
+	 */
+	checkAllOpenedJavaFiles();
+	const javaWatcher = vscode.workspace.createFileSystemWatcher('src/**/*.java');
+	// Change of *.java file is detected when the file is saved.
+	javaWatcher.onDidChange(uri => processJavaFileByPath(uri.fsPath));
+	javaWatcher.onDidCreate(uri => processJavaFileByPath(uri.fsPath));
+	javaWatcher.onDidDelete(uri => {
+		const fxmlPath = getFxmlByControllerFilePath(uri.fsPath);
+		if (fxmlPath) {
+			delete fxmlDictionary[fxmlPath];
 		}
 	});
 
-	vscode.workspace.onDidOpenTextDocument(document => {
-		if (document.languageId === 'java') {
-			processJavaDocument(document);
-		}
-	});
-
+	// A change to the .java file is detected if it is not saved.	
 	vscode.workspace.onDidChangeTextDocument(event => {
 		const document = event.document;
 		if (document.languageId === 'java') {
-			processJavaDocument(document);
+			processJavaFileByTextDocument(document);
 		}
 	});
+
 
 	context.subscriptions.push(
 		vscode.languages.registerCodeActionsProvider('java', new MissingFxIdProvider(), {
@@ -320,11 +329,11 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
-	workspaceFolders.forEach(folder => {
-		context.subscriptions.push(
-			vscode.languages.registerCodeLensProvider('java', new MissingFxIdLensProvider())
-		);
-	});
+
+	context.subscriptions.push(
+		vscode.languages.registerCodeLensProvider('java', new ControllerSupportLensProvider())
+	);
+
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('javafx-controller-support.addAllMissingFxIds',
@@ -336,7 +345,7 @@ export function activate(context: vscode.ExtensionContext) {
 						return;
 					}
 					document = activeEditor.document;
-					const fxmlPath = getFxmlByControllerUri(document.uri);
+					const fxmlPath = getFxmlByControllerFilePath(document.uri.fsPath);
 					if (!fxmlPath) {
 						vscode.window.showErrorMessage('No corresponding FXML file found.');
 						return;
@@ -371,7 +380,7 @@ export function activate(context: vscode.ExtensionContext) {
 					return;
 				}
 				document = activeEditor.document;
-				const fxmlPath = getFxmlByControllerUri(document.uri);
+				const fxmlPath = getFxmlByControllerFilePath(document.uri.fsPath);
 				if (!fxmlPath) {
 					vscode.window.showErrorMessage('No corresponding FXML file found.');
 					return;
@@ -400,50 +409,73 @@ ${indentUnit}}
 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('fxml');
 
-function processJavaDocument(document: vscode.TextDocument) {
-	const openedFilePath = document.uri.fsPath;
-	const fxmlPath = getFxmlByControllerUri(document.uri);
-	if (fxmlPath) {
-		console.log(`## Opened Java file matches fx:controller. FXML: ${fxmlPath}, Controller class: ${openedFilePath}`);
-		const fxmlData = fxmlDictionary[fxmlPath];
+export async function createDocumentFromText(
+	content: string,
+	language: string = 'plaintext'
+): Promise<vscode.TextDocument> {
+	const document = await vscode.workspace.openTextDocument({
+		content: content,
+		language: language
+	});
+	return document;
+}
 
-		const javaText = document.getText();
-		const diagnostics: vscode.Diagnostic[] = [];
+async function processJavaFileByPath(fullPath: string) {
+	const fxmlPath = getFxmlByControllerFilePath(fullPath);
+	if (!fxmlPath) { return; }
 
-		const fxIdPattern = /@FXML\s+\S+\s+\S+\s+(\w+)\s*;/g;
+	const javaText = fs.readFileSync(fullPath, 'utf-8');
+	const document = await createDocumentFromText(javaText, 'java');
 
-		let match;
-		while ((match = fxIdPattern.exec(javaText)) !== null) {
-			const fxId = match[1];
-			const fxIdExistsInFxml = fxmlData.tagAndFxIds.some(pair => pair.fxId === fxId);
-			if (!fxIdExistsInFxml) {
-				const message = `fx:id="${fxId}" does not exist in the FXML file.`;
-				const startPos = document.positionAt(match.index);
-				const endPos = document.positionAt(match.index + match[0].length);
-				const range = new vscode.Range(startPos, endPos);
-				const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
-				diagnostics.push(diagnostic);
-			}
+	processJavaDocument(fxmlPath, document);
+}
+
+async function processJavaFileByTextDocument(document: vscode.TextDocument) {
+	const fxmlPath = getFxmlByControllerFilePath(document.uri.fsPath);
+	if (!fxmlPath) { return; }
+
+	processJavaDocument(fxmlPath, document);
+}
+
+function processJavaDocument(fxmlPath: string, document: vscode.TextDocument) {
+	const fxmlData = fxmlDictionary[fxmlPath];
+
+	const diagnostics: vscode.Diagnostic[] = [];
+
+	const fxIdPattern = /@FXML\s+\S+\s+\S+\s+(\w+)\s*;/g;
+	const javaText = document.getText();
+	let match;
+	while ((match = fxIdPattern.exec(javaText)) !== null) {
+		const fxId = match[1];
+		const fxIdExistsInFxml = fxmlData.tagAndFxIds.some(pair => pair.fxId === fxId);
+		if (!fxIdExistsInFxml) {
+			const message = `fx:id="${fxId}" does not exist in the FXML file.`;
+
+			const startPos = document.positionAt(match.index);
+			const endPos = document.positionAt(match.index + match[0].length);
+			const range = new vscode.Range(startPos, endPos);
+			const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
+			diagnostics.push(diagnostic);
 		}
-
-		fxmlData.tagAndFxIds.forEach(pair => {
-			if (!hasFxIdField(javaText, pair.fxId)) {
-				const message = `Missing @FXML field for fx:id="${pair.fxId}"`;
-
-				let classDeclarationLine = findClassDeclarationLine(javaText);
-				if (classDeclarationLine === -1) {
-					return;
-				}
-
-				const range = new vscode.Range(classDeclarationLine + 1, 0, classDeclarationLine + 1, 0);
-				const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
-				diagnostics.push(diagnostic);
-			}
-		});
-
-		diagnosticCollection.delete(document.uri);
-		diagnosticCollection.set(document.uri, diagnostics);
 	}
+
+	fxmlData.tagAndFxIds.forEach(pair => {
+		if (!hasFxIdField(javaText, pair.fxId)) {
+			const message = `Missing @FXML field for fx:id="${pair.fxId}"`;
+
+			let classDeclarationLine = findClassDeclarationLine(javaText);
+			if (classDeclarationLine === -1) {
+				return;
+			}
+
+			const range = new vscode.Range(classDeclarationLine + 1, 0, classDeclarationLine + 1, 0);
+			const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
+			diagnostics.push(diagnostic);
+		}
+	});
+
+	diagnosticCollection.delete(document.uri);
+	diagnosticCollection.set(document.uri, diagnostics);
 }
 
 // This method is called when your extension is deactivated

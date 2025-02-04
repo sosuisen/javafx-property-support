@@ -36,7 +36,7 @@ function getControllerFilePath(
 }
 
 function hasFxIdField(javaText: string, fxId: string): boolean {
-	const pattern = new RegExp(`@FXML\\s+private\\s+\\S+\\s+${fxId}\\s*;`);
+	const pattern = new RegExp(`@FXML\\s+\\S+\\s+\\S+\\s+${fxId}\\s*;`);
 	return pattern.test(javaText);
 }
 
@@ -172,7 +172,6 @@ function findMissingTagAndFxIds(javaText: string, fxmlPath: string): TagAndFxId[
 	return missings;
 }
 
-
 function findClassDeclarationLine(javaText: string): number {
 	const lines = javaText.split('\n');
 	for (let i = 0; i < lines.length; i++) {
@@ -194,11 +193,6 @@ function findClassEndLine(javaText: string): number {
 }
 
 class MissingFxIdLensProvider implements vscode.CodeLensProvider {
-	private workspaceRoot: vscode.Uri;
-
-	constructor(workspaceRoot: vscode.Uri) {
-		this.workspaceRoot = workspaceRoot;
-	}
 
 	public provideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.CodeLens[] {
 		const lenses: vscode.CodeLens[] = [];
@@ -328,10 +322,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	workspaceFolders.forEach(folder => {
 		context.subscriptions.push(
-			vscode.languages.registerCodeLensProvider('java', new MissingFxIdLensProvider(folder.uri))
+			vscode.languages.registerCodeLensProvider('java', new MissingFxIdLensProvider())
 		);
 	});
-
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('javafx-controller-support.addAllMissingFxIds',
@@ -354,15 +347,15 @@ export function activate(context: vscode.ExtensionContext) {
 					}
 				}
 
-				let insertLine = findClassDeclarationLine(document.getText());
-				if (insertLine === -1) {
+				let classDeclarationLine = findClassDeclarationLine(document.getText());
+				if (classDeclarationLine === -1) {
 					vscode.window.showErrorMessage('No class declaration found.');
 					return;
 				}
 
 				const edit = new vscode.WorkspaceEdit();
 				missingTagAndFxIds.forEach(tagAndFxId => {
-					insertFieldWithIndent(document, edit, insertLine, tagAndFxId.tagName, tagAndFxId.fxId);
+					insertFieldWithIndent(document, edit, classDeclarationLine + 1, tagAndFxId.tagName, tagAndFxId.fxId);
 				});
 
 				vscode.workspace.applyEdit(edit);
@@ -388,8 +381,8 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 
 			const edit = new vscode.WorkspaceEdit();
-			let classLine = findClassDeclarationLine(document.getText());
-			const indentUnit = calculateIndentation(document, classLine, classLine + 3);
+			let classDeclarationLine = findClassDeclarationLine(document.getText());
+			const indentUnit = calculateIndentation(document, classDeclarationLine + 1, classDeclarationLine + 4);
 
 			const insertPosition = new vscode.Position(classEndLine, 0);
 			const initializeMethod = `
@@ -411,13 +404,13 @@ function processJavaDocument(document: vscode.TextDocument) {
 	const openedFilePath = document.uri.fsPath;
 	const fxmlPath = getFxmlByControllerUri(document.uri);
 	if (fxmlPath) {
-		console.log(`## Opened Java file matches fx:controller. FXML: ${fxmlPath}, Controller Path: ${openedFilePath}`);
+		console.log(`## Opened Java file matches fx:controller. FXML: ${fxmlPath}, Controller class: ${openedFilePath}`);
 		const fxmlData = fxmlDictionary[fxmlPath];
 
 		const javaText = document.getText();
 		const diagnostics: vscode.Diagnostic[] = [];
 
-		const fxIdPattern = /@FXML\s+private\s+\S+\s+(\w+)\s*;/g;
+		const fxIdPattern = /@FXML\s+\S+\s+\S+\s+(\w+)\s*;/g;
 
 		let match;
 		while ((match = fxIdPattern.exec(javaText)) !== null) {
@@ -437,12 +430,12 @@ function processJavaDocument(document: vscode.TextDocument) {
 			if (!hasFxIdField(javaText, pair.fxId)) {
 				const message = `Missing @FXML field for fx:id="${pair.fxId}"`;
 
-				let insertLine = findClassDeclarationLine(javaText);
-				if (insertLine === -1) {
+				let classDeclarationLine = findClassDeclarationLine(javaText);
+				if (classDeclarationLine === -1) {
 					return;
 				}
 
-				const range = new vscode.Range(insertLine, 0, insertLine, 0);
+				const range = new vscode.Range(classDeclarationLine + 1, 0, classDeclarationLine + 1, 0);
 				const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
 				diagnostics.push(diagnostic);
 			}

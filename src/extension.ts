@@ -1,6 +1,40 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import * as path from 'path';
+import { TextDocumentIdentifier, Position, TextDocumentPositionParams } from 'vscode-languageclient';
+import { Range, SymbolKind } from "vscode-languageclient";
+
+enum TypeHierarchyDirection {
+	children,
+	parents,
+	both
+}
+
+class LSPTypeHierarchyItem {
+	name!: string;
+	detail!: string;
+	kind!: SymbolKind;
+	deprecated!: boolean;
+	uri!: string;
+	range!: Range;
+	selectionRange!: Range;
+	parents!: LSPTypeHierarchyItem[];
+	children!: LSPTypeHierarchyItem[];
+	data: any;
+}
+
+class TypeHierarchyItem {
+	name!: string;
+	detail!: string;
+	kind!: vscode.SymbolKind;
+	deprecated!: boolean;
+	uri!: string;
+	range!: vscode.Range;
+	selectionRange!: vscode.Range;
+	parents!: TypeHierarchyItem[];
+	children!: TypeHierarchyItem[];
+	data: any;
+	expand!: boolean;
+}
 
 type FxmlFileInfo = {
 	workspaceFolder: vscode.WorkspaceFolder;
@@ -270,6 +304,8 @@ function checkAllOpenedJavaFiles() {
 	});
 }
 
+let cancelTokenSource: vscode.CancellationTokenSource | undefined;
+
 // This method is called when the extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -401,6 +437,105 @@ ${indentUnit}}
 `;
 			edit.insert(document.uri, insertPosition, initializeMethod);
 			vscode.workspace.applyEdit(edit);
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('javafx-controller-support.showMethods', async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showErrorMessage('エディタが開かれていません。');
+				return;
+			}
+
+			if (editor.document.languageId !== 'java') {
+				vscode.window.showErrorMessage('Javaファイルではありません。');
+				return;
+			}
+
+			const cursorPosition = editor.selection.active;
+			const document = editor.document;
+
+			const textDocument: TextDocumentIdentifier = TextDocumentIdentifier.create(document.uri.toString());
+			const position: Position = Position.create(cursorPosition.line, cursorPosition.character);
+			const params: TextDocumentPositionParams = {
+				textDocument: textDocument,
+				position: position,
+			};
+			let lspItem: LSPTypeHierarchyItem;
+			const direction = TypeHierarchyDirection.parents;
+			if (cancelTokenSource) {
+				cancelTokenSource.cancel();
+			}
+			cancelTokenSource = new vscode.CancellationTokenSource();
+			try {
+				lspItem = await vscode.commands.executeCommand(
+					'java.execute.workspaceCommand',
+					'java.navigate.openTypeHierarchy',
+					JSON.stringify(params), JSON.stringify(direction), JSON.stringify(0), cancelTokenSource.token);
+			} catch (e) {
+				// operation cancelled
+				return;
+			}
+			console.log(lspItem.parents);
+
+
+			// 型定義を取得
+			const typeDefinition = await vscode.commands.executeCommand<vscode.TypeHierarchyItem[]>(
+				'vscode.executeTypeDefinitionProvider',
+				document.uri,
+				cursorPosition
+			);
+
+			if (!typeDefinition || typeDefinition.length === 0) {
+				vscode.window.showInformationMessage('クラスが見つかりません。');
+				return;
+			}
+
+			// 最初の型定義を使用（通常は1つのみ）
+			const classType = typeDefinition[0];
+
+			console.log(classType);
+
+
+			// シンボル情報を取得
+			const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+				'vscode.executeDocumentSymbolProvider',
+				classType.uri
+			);
+
+			console.log(symbols);
+
+			if (!symbols) {
+				vscode.window.showErrorMessage('シンボル情報を取得できません。');
+				return;
+			}
+
+			// クラスシンボルを探す（型定義のrangeを使用）
+			const classSymbol = symbols.find(symbol =>
+				symbol.kind === vscode.SymbolKind.Class &&
+				symbol.range.contains(classType.range)
+			);
+
+			if (!classSymbol) {
+				vscode.window.showInformationMessage('クラスシンボルが見つかりません。');
+				return;
+			}
+
+			// setから始まるメソッドを収集
+			const setterMethods = classSymbol.children
+				.filter(symbol =>
+					symbol.kind === vscode.SymbolKind.Method &&
+					symbol.name.startsWith('set')
+				)
+				.map(symbol => symbol.name);
+
+			if (setterMethods.length > 0) {
+				console.log(`クラス ${classType.name} のsetterメソッド一覧:`);
+				setterMethods.sort().forEach(method => console.log(`- ${method}`));
+			} else {
+				console.log('setterメソッドが見つかりません。');
+			}
 		})
 	);
 

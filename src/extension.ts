@@ -486,26 +486,29 @@ ${indentUnit}}
 
 			const allSetterMethods = new Set<string>();
 			const processedClasses = new Set<string>();
+			const classQueue: LSPTypeHierarchyItem[] = [lspItem];
 
-			// 再帰的にクラス階層を処理する関数
-			async function processClassHierarchy(item: LSPTypeHierarchyItem) {
+			// キューを使用してクラス階層を処理
+			while (classQueue.length > 0) {
+				const currentItem = classQueue.shift()!;
+				const classKey = `${currentItem.uri}#${currentItem.name}`;
+
 				// 処理済みのクラスはスキップ
-				const classKey = `${item.uri}#${item.name}`;
 				if (processedClasses.has(classKey)) {
-					return;
+					continue;
 				}
 				processedClasses.add(classKey);
 
 				// シンボル情報を取得
 				const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
 					'vscode.executeDocumentSymbolProvider',
-					vscode.Uri.parse(item.uri)
+					vscode.Uri.parse(currentItem.uri)
 				);
 
 				if (symbols) {
 					const classSymbol = symbols.find(symbol =>
 						symbol.kind === vscode.SymbolKind.Class &&
-						symbol.name === item.name
+						symbol.name === currentItem.name
 					);
 
 					if (classSymbol) {
@@ -515,22 +518,17 @@ ${indentUnit}}
 								symbol.kind === vscode.SymbolKind.Method &&
 								symbol.name.startsWith('set')
 							)
-							.map(symbol => `${item.name}#${symbol.name}`);
+							.map(symbol => `${currentItem.name}#${symbol.name}`);
 
 						setterMethods.forEach(method => allSetterMethods.add(method));
 					}
 				}
 
-				// 親クラスを再帰的に処理
-				if (item.parents && item.parents.length > 0) {
-					for (const parent of item.parents) {
-						await processClassHierarchy(parent);
-					}
+				// 親クラスをキューに追加
+				if (currentItem.parents && currentItem.parents.length > 0) {
+					classQueue.push(...currentItem.parents);
 				}
 			}
-
-			// クラス階層の処理を開始
-			await processClassHierarchy(lspItem);
 
 			if (allSetterMethods.size > 0) {
 				console.log('継承を含むsetterメソッド一覧:');

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { getFxmlByControllerFilePath, findClassDeclarationLine, calculateIndentation } from '../util';
-import { fxmlDictionary } from '../extension';
+import { fxmlDictionary } from '../fxmlDictionary';
 
 export async function addAllMissingFxIds() {
     const editor = vscode.window.activeTextEditor;

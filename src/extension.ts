@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { TextDocumentIdentifier, Position, TextDocumentPositionParams } from 'vscode-languageclient';
 import { Range, SymbolKind } from "vscode-languageclient";
+import path from 'path';
+import * as os from 'os';
 
 enum TypeHierarchyDirection {
 	children,
@@ -22,18 +24,10 @@ class LSPTypeHierarchyItem {
 	data: any;
 }
 
-class TypeHierarchyItem {
-	name!: string;
-	detail!: string;
-	kind!: vscode.SymbolKind;
-	deprecated!: boolean;
-	uri!: string;
-	range!: vscode.Range;
-	selectionRange!: vscode.Range;
-	parents!: TypeHierarchyItem[];
-	children!: TypeHierarchyItem[];
-	data: any;
-	expand!: boolean;
+interface MethodInfo {
+	methodName: string;
+	className: string;
+	dataTypeList: string[];
 }
 
 type FxmlFileInfo = {
@@ -479,14 +473,17 @@ ${indentUnit}}
 				return;
 			}
 
+			const targetClassFullName = lspItem.detail + '.' + lspItem.name;
+			const targetClassName = lspItem.name;
+
 			if (!lspItem) {
 				vscode.window.showInformationMessage('クラスが見つかりません。');
 				return;
 			}
 
-			const allSetterMethods = new Set<string>();
 			const processedClasses = new Set<string>();
 			const classQueue: LSPTypeHierarchyItem[] = [lspItem];
+			const methodMap = new Map<string, MethodInfo>();
 
 			// キューを使用してクラス階層を処理
 			while (classQueue.length > 0) {
@@ -512,15 +509,80 @@ ${indentUnit}}
 					);
 
 					if (classSymbol) {
+						// console.log('classSymbol', classSymbol.children[0]);
 						// setterメソッドを収集
-						const setterMethods = classSymbol.children
+						classSymbol.children
 							.filter(symbol =>
 								symbol.kind === vscode.SymbolKind.Method &&
 								symbol.name.startsWith('set')
 							)
-							.map(symbol => `${currentItem.name}#${symbol.name}`);
+							.forEach(symbol => {
+								// メソッド名とパラメータを分離
+								const methodMatch = symbol.name.match(/^(set\w+)\((.*)\)/);
+								if (methodMatch) {
+									const [, methodName, params] = methodMatch;
 
-						setterMethods.forEach(method => allSetterMethods.add(method));
+									// ジェネリック型のパラメータを処理する関数
+									function processGenericTypes(text: string): string[] {
+										const result: string[] = [];
+										let depth = 0;
+										let current = '';
+										let inGeneric = false;
+
+										for (let i = 0; i < text.length; i++) {
+											const char = text[i];
+											if (char === '<') {
+												depth++;
+												inGeneric = true;
+												current += char;
+											}
+											else if (char === '>') {
+												depth--;
+												current += char;
+												if (depth === 0) {
+													inGeneric = false;
+												}
+											}
+											else if (char === ',' && !inGeneric) {
+												if (current.trim()) {
+													result.push(current.trim());
+												}
+												current = '';
+											}
+											else {
+												current += char;
+											}
+										}
+										if (current.trim()) {
+											result.push(current.trim());
+										}
+										return result;
+									}
+
+									// パラメータをジェネリック型を考慮して分割
+									const dataTypeList = processGenericTypes(params);
+
+									// メソッド名から'set'を除いて小文字にしたものをキーとして使用
+									const key = methodName.substring(3).charAt(0).toLowerCase() +
+										methodName.substring(4);
+
+									// まだ登録されていないメソッドのみを追加（親クラスのメソッドは無視）
+									if (!methodMap.has(key)) {
+										// Deprecatedの処理
+										const deprecated = ['LayoutFlags', 'ParentTraversalEngine'];
+										// 引数のデータ型にdeprecatedが含まれる場合は、スキップ
+										if (dataTypeList.some(type => deprecated.some(d => type.includes(d)))) {
+											return;
+										}
+
+										methodMap.set(key, {
+											methodName,
+											className: currentItem.name,
+											dataTypeList
+										});
+									}
+								}
+							});
 					}
 				}
 
@@ -530,17 +592,85 @@ ${indentUnit}}
 				}
 			}
 
-			if (allSetterMethods.size > 0) {
-				console.log('継承を含むsetterメソッド一覧:');
-				Array.from(allSetterMethods)
-					.sort()
-					.forEach(method => {
-						const [className, methodName] = method.split('#');
-						console.log(`- ${methodName} (定義: ${className})`);
+			// Map から配列に変換
+			const methodInfoList = Array.from(methodMap.values());
+
+			if (methodInfoList.length > 0) {
+				// console.log('継承を含むsetterメソッド一覧:');
+				methodInfoList
+					.sort((a, b) => a.methodName.localeCompare(b.methodName))
+					.forEach(info => {
+						const paramTypes = info.dataTypeList.length > 0
+							? `(${info.dataTypeList.join(', ')})`
+							: '()';
+						const paramPairs = info.dataTypeList.map((type, index) => {
+							if (info.methodName === 'setMaxSize' || info.methodName === 'setMinSize') {
+								return index === 0 ? `${type} width` : `${type} height`;
+							}
+							return info.dataTypeList.length === 1 ? `${type} value` : `${type} value${index + 1}`;
+						});
+						const paramNames = paramPairs.map((pair, index) => {
+							if (info.methodName === 'setMaxSize' || info.methodName === 'setMinSize') {
+								return index === 0 ? 'width' : 'height';
+							}
+							return info.dataTypeList.length === 1 ? 'value' : `value${index + 1}`;
+						}).join(', ');
+						// console.log(`- ${info.methodName}(${paramNames})${paramTypes} (定義: ${info.className})`);
 					});
 			} else {
 				console.log('setterメソッドが見つかりません。');
 			}
+
+			const currentFileUri = vscode.Uri.parse(document.uri.toString());
+			const workspaceFolder = vscode.workspace.getWorkspaceFolder(currentFileUri);
+			if (!workspaceFolder) {
+				console.error('ワークスペースフォルダが見つかりません。');
+				return;
+			}
+
+			const mainClass = await findMainClass(workspaceFolder);
+			if (mainClass) {
+				console.log(`メインクラスのパス: ${mainClass.filePath}`);
+
+				// カーソル行の new TargetClassName を new TargetClassNameBuilder に置換
+				const line = editor.document.lineAt(cursorPosition.line).text;
+				const newPattern = new RegExp(`new\\s+${targetClassName}\\s*\\(`);
+				const match = line.match(newPattern);
+				if (match) {
+					const startPos = match.index!;
+					const edit = new vscode.WorkspaceEdit();
+
+					// 既存のimport文をチェック
+					const documentText = editor.document.getText();
+					const importPattern = new RegExp(`^import\\s+${targetClassFullName};`, 'm');
+					if (!importPattern.test(documentText)) {
+						// package行を探す
+						const packageMatch = documentText.match(/^package\s+[^;]+;/m);
+						if (packageMatch) {
+							const packageEndPos = editor.document.positionAt(packageMatch.index! + packageMatch[0].length);
+							// package行の後にimport文を追加
+							edit.insert(editor.document.uri, new vscode.Position(packageEndPos.line + 1, 0),
+								`\nimport ${targetClassFullName};\n`);
+						}
+					}
+
+					// new TargetClassName を new TargetClassNameBuilder に置換
+					const range = new vscode.Range(
+						cursorPosition.line,
+						startPos + 4,
+						cursorPosition.line,
+						startPos + 4 + targetClassName.length
+					);
+					edit.replace(editor.document.uri, range, `${targetClassName}Builder`);
+					await vscode.workspace.applyEdit(edit);
+				}
+
+				await createBuilderClass(methodInfoList, mainClass, targetClassName);
+			} else {
+				console.log('メインクラスが見つかりません。');
+			}
+
+
 		})
 	);
 
@@ -620,3 +750,147 @@ function processJavaDocument(fxmlPath: string, document: vscode.TextDocument) {
 
 // This method is called when your extension is deactivated
 export function deactivate() { }
+
+async function findMainClass(workspaceFolder: vscode.WorkspaceFolder): Promise<{ packageName: string, filePath: string } | null> {
+	const pattern = new vscode.RelativePattern(workspaceFolder, 'src/**/*.java');
+	const files = await vscode.workspace.findFiles(pattern);
+
+	for (const file of files) {
+		try {
+			const document = await vscode.workspace.openTextDocument(file);
+			const content = document.getText();
+
+			const packageMatch = content.match(/package\s+([^;]+);/);
+			if (packageMatch) {
+				const packageName = packageMatch[1].trim();
+				const applicationPattern = /class\s+\w+\s+extends\s+(?:javafx\.application\.)?(Application)/;
+				if (applicationPattern.test(content)) {
+					return { packageName, filePath: file.fsPath };
+				}
+			}
+		}
+		catch (e) {
+			console.error(`Error processing file ${file.fsPath}:`, e);
+			continue;
+		}
+	}
+
+	return null;
+}
+
+async function createBuilderClass(methodInfoList: MethodInfo[], mainClass: { packageName: string, filePath: string }, targetClassName: string) {
+	const mainClassPath = mainClass.filePath;
+	const mainClassDir = mainClassPath.substring(0, mainClassPath.lastIndexOf(path.sep));
+
+	// jfxbuilderフォルダのパスを作成
+	const builderDirPath = `${mainClassDir}/jfxbuilder`;
+	const builderFilePath = `${builderDirPath}/${targetClassName}Builder.java`;
+
+	try {
+		// Builderメソッドを生成
+		const builderMethods = methodInfoList
+			.map(info => {
+				const methodName = info.methodName.substring(3); // 'set'を除去
+				const firstChar = methodName.charAt(0).toLowerCase();
+				const builderMethodName = firstChar + methodName.slice(1);
+				// パラメータの型と名前のペアを生成
+
+
+				const paramPairs = info.dataTypeList.map((type, index) => {
+					if (info.methodName === 'setMaxSize' || info.methodName === 'setMinSize' || info.methodName === 'setPrefSize') {
+						return index === 0 ? `${type} width` : `${type} height`;
+					}
+					return info.dataTypeList.length === 1 ? `${type} value` : `${type} value${index + 1}`;
+				});
+				const paramNames = paramPairs.map((pair, index) => {
+					if (info.methodName === 'setMaxSize' || info.methodName === 'setMinSize' || info.methodName === 'setPrefSize') {
+						return index === 0 ? 'width' : 'height';
+					}
+					return info.dataTypeList.length === 1 ? 'value' : `value${index + 1}`;
+				}).join(', ');
+
+				const paramList = paramPairs.join(', ');
+
+
+
+				// パラメータリストに<T>が含まれる場合、ジェネリック型パラメータを追加
+				// TODO: Eventに決め打ちしているので良くない	
+				const hasGenericType = paramList.includes('<T>');
+				const methodSignature = hasGenericType ?
+					`    public <T extends Event> ${targetClassName}Builder ${builderMethodName}(${paramList})` :
+					`    public ${targetClassName}Builder ${builderMethodName}(${paramList})`;
+				return methodSignature + ` { in.${info.methodName}(${paramNames}); return this; }`;
+			})
+			.join('\n\n');
+
+		// Builderクラスのコードを生成
+		let builderCode = `package ${mainClass.packageName}.jfxbuilder;
+
+import javafx.scene.*;
+import javafx.scene.layout.*;
+import javafx.scene.effect.*;
+import javafx.scene.control.*;
+import javafx.scene.input.*;
+import javafx.scene.text.*;
+import javafx.scene.shape.*;
+import javafx.scene.paint.*;
+import javafx.css.*;
+import javafx.event.*;
+import javafx.geometry.*;
+import javafx.collections.*;
+import java.util.*;
+
+public class ${targetClassName}Builder {
+    private ${targetClassName} in;
+
+    public ${targetClassName}Builder() { in = new ${targetClassName}(); }
+
+${builderMethods}
+
+    public ${targetClassName} build() { return in; }
+}
+`;
+
+		// フォルダが存在しない場合は作成
+		if (!fs.existsSync(builderDirPath)) {
+			fs.mkdirSync(builderDirPath);
+		}
+
+		// ファイルを作成
+		fs.writeFileSync(builderFilePath, builderCode);
+		console.log(`Builderクラスを作成しました: ${builderFilePath}`);
+
+		// 0.5秒おきに20回診断を実行
+		for (let i = 0; i < 20; i++) {
+			await new Promise(resolve => setTimeout(resolve, 500));
+			const diagnostics = vscode.languages.getDiagnostics(vscode.Uri.file(builderFilePath));
+			if (diagnostics.length > 0) {
+				// Diagnosticsがある行をコメントアウト
+				const lines = builderCode.split('\n');
+				diagnostics.forEach(diagnostic => {
+					const lineNumber = diagnostic.range.start.line;
+					if (diagnostic.code === '67108965') { // not visible
+						lines[lineNumber] = '';
+					}
+					if (diagnostic.code === '268435844') { // never used
+						lines[lineNumber] = '';
+					}
+				});
+
+
+				// 空行を削除
+
+				builderCode = lines
+					.filter(line => !line.trim().startsWith('//'))
+					.join('\n');
+
+				fs.writeFileSync(builderFilePath, builderCode);
+			}
+		}
+		builderCode = builderCode.replace(/\n+/g, '\n');
+		fs.writeFileSync(builderFilePath, builderCode);
+	} catch (error) {
+		console.error('Builderクラスの作成に失敗しました:', error);
+	}
+}
+

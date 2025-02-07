@@ -29,8 +29,8 @@
         "title": "JavaFX Controller: Add initialize()"
       },
       {
-        "command": "javafx-controller-support.showMethods",
-        "title": "JavaFX Controller: Show Methods in Current Class"
+        "command": "javafx-controller-support.generateBuilderClass",
+        "title": "JavaFX Controller: Generate Builder Class"
       }
     ],
     "languages": [

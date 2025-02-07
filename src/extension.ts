@@ -468,53 +468,39 @@ ${indentUnit}}
 				cancelTokenSource.cancel();
 			}
 			cancelTokenSource = new vscode.CancellationTokenSource();
+			const maxDepth = 100;
 			try {
 				lspItem = await vscode.commands.executeCommand(
 					'java.execute.workspaceCommand',
 					'java.navigate.openTypeHierarchy',
-					JSON.stringify(params), JSON.stringify(direction), JSON.stringify(0), cancelTokenSource.token);
+					JSON.stringify(params), JSON.stringify(direction), JSON.stringify(maxDepth), cancelTokenSource.token);
 			} catch (e) {
 				// operation cancelled
 				return;
 			}
-			console.log(lspItem.parents);
 
-
-			// 型定義を取得
-			const typeDefinition = await vscode.commands.executeCommand<vscode.TypeHierarchyItem[]>(
-				'vscode.executeTypeDefinitionProvider',
-				document.uri,
-				cursorPosition
-			);
-
-			if (!typeDefinition || typeDefinition.length === 0) {
+			if (!lspItem) {
 				vscode.window.showInformationMessage('クラスが見つかりません。');
 				return;
 			}
-
-			// 最初の型定義を使用（通常は1つのみ）
-			const classType = typeDefinition[0];
-
-			console.log(classType);
-
+			console.log(lspItem);
 
 			// シンボル情報を取得
 			const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
 				'vscode.executeDocumentSymbolProvider',
-				classType.uri
+				vscode.Uri.parse(lspItem.uri)
 			);
-
-			console.log(symbols);
 
 			if (!symbols) {
 				vscode.window.showErrorMessage('シンボル情報を取得できません。');
 				return;
 			}
 
-			// クラスシンボルを探す（型定義のrangeを使用）
+			console.log(symbols);
+
 			const classSymbol = symbols.find(symbol =>
 				symbol.kind === vscode.SymbolKind.Class &&
-				symbol.range.contains(classType.range)
+				symbol.name === lspItem.name
 			);
 
 			if (!classSymbol) {
@@ -531,7 +517,7 @@ ${indentUnit}}
 				.map(symbol => symbol.name);
 
 			if (setterMethods.length > 0) {
-				console.log(`クラス ${classType.name} のsetterメソッド一覧:`);
+				console.log(`クラス ${lspItem.name} のsetterメソッド一覧:`);
 				setterMethods.sort().forEach(method => console.log(`- ${method}`));
 			} else {
 				console.log('setterメソッドが見つかりません。');

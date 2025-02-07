@@ -483,42 +483,63 @@ ${indentUnit}}
 				vscode.window.showInformationMessage('クラスが見つかりません。');
 				return;
 			}
-			console.log(lspItem);
 
-			// シンボル情報を取得
-			const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-				'vscode.executeDocumentSymbolProvider',
-				vscode.Uri.parse(lspItem.uri)
-			);
+			const allSetterMethods = new Set<string>();
+			const processedClasses = new Set<string>();
 
-			if (!symbols) {
-				vscode.window.showErrorMessage('シンボル情報を取得できません。');
-				return;
+			// 再帰的にクラス階層を処理する関数
+			async function processClassHierarchy(item: LSPTypeHierarchyItem) {
+				// 処理済みのクラスはスキップ
+				const classKey = `${item.uri}#${item.name}`;
+				if (processedClasses.has(classKey)) {
+					return;
+				}
+				processedClasses.add(classKey);
+
+				// シンボル情報を取得
+				const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+					'vscode.executeDocumentSymbolProvider',
+					vscode.Uri.parse(item.uri)
+				);
+
+				if (symbols) {
+					const classSymbol = symbols.find(symbol =>
+						symbol.kind === vscode.SymbolKind.Class &&
+						symbol.name === item.name
+					);
+
+					if (classSymbol) {
+						// setterメソッドを収集
+						const setterMethods = classSymbol.children
+							.filter(symbol =>
+								symbol.kind === vscode.SymbolKind.Method &&
+								symbol.name.startsWith('set')
+							)
+							.map(symbol => `${item.name}#${symbol.name}`);
+
+						setterMethods.forEach(method => allSetterMethods.add(method));
+					}
+				}
+
+				// 親クラスを再帰的に処理
+				if (item.parents && item.parents.length > 0) {
+					for (const parent of item.parents) {
+						await processClassHierarchy(parent);
+					}
+				}
 			}
 
-			console.log(symbols);
+			// クラス階層の処理を開始
+			await processClassHierarchy(lspItem);
 
-			const classSymbol = symbols.find(symbol =>
-				symbol.kind === vscode.SymbolKind.Class &&
-				symbol.name === lspItem.name
-			);
-
-			if (!classSymbol) {
-				vscode.window.showInformationMessage('クラスシンボルが見つかりません。');
-				return;
-			}
-
-			// setから始まるメソッドを収集
-			const setterMethods = classSymbol.children
-				.filter(symbol =>
-					symbol.kind === vscode.SymbolKind.Method &&
-					symbol.name.startsWith('set')
-				)
-				.map(symbol => symbol.name);
-
-			if (setterMethods.length > 0) {
-				console.log(`クラス ${lspItem.name} のsetterメソッド一覧:`);
-				setterMethods.sort().forEach(method => console.log(`- ${method}`));
+			if (allSetterMethods.size > 0) {
+				console.log('継承を含むsetterメソッド一覧:');
+				Array.from(allSetterMethods)
+					.sort()
+					.forEach(method => {
+						const [className, methodName] = method.split('#');
+						console.log(`- ${methodName} (定義: ${className})`);
+					});
 			} else {
 				console.log('setterメソッドが見つかりません。');
 			}

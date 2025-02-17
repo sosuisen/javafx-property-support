@@ -12,6 +12,8 @@ import { processFxmlFile } from './diagnostics/diagFxml';
 
 // This method is called when the extension is activated
 export function activate(context: vscode.ExtensionContext) {
+	console.log('JavaFX Controller Support extension is activated');
+
 	const workspaceFolders = vscode.workspace.workspaceFolders;
 	if (!workspaceFolders) {
 		console.error('No workspace folder is open.');

@@ -42,7 +42,7 @@ Generates a builder class for a classe in javafx.scene.* packages.
 
 2. 🔧 Press "Generate Builder Class" Code Lens.
 
-- As a result, the Builder class is generated and replaces the original class in the source code.
+- As a result, a Builder class is generated and replaces the original class in the source code.
 
 <img src="images/builder_02.png" width="200">
 

@@ -76,6 +76,10 @@ https://github.com/sosuisen/javafx-controller-support/issues
 
 ## Release Notes
 
+### 1.1.0
+
+- Added Builder generator.
+
 ### 1.0.0
 
 Initial release.

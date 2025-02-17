@@ -11,7 +11,7 @@ import { processJavaFileByPath, processJavaFileByTextDocument } from './diagnost
 import { processFxmlFile } from './diagnostics/diagFxml';
 
 // This method is called when the extension is activated
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 	console.log('JavaFX Controller Support extension is activated');
 
 	const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -23,11 +23,10 @@ export function activate(context: vscode.ExtensionContext) {
 	/**
 	 * Observe changes of *.fxml files.
 	 */
-	function checkAllFxmlFiles() {
-		vscode.workspace.findFiles("src/**/*.fxml").then(files => {
-			files.forEach(uri => {
-				processFxmlFile(uri.fsPath);
-			});
+	async function checkAllFxmlFiles() {
+		const files = await vscode.workspace.findFiles("src/**/*.fxml");
+		files.forEach(uri => {
+			processFxmlFile(uri.fsPath);
 		});
 	}
 
@@ -39,7 +38,7 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	}
 	// Check all *.fxml files.
-	checkAllFxmlFiles();
+	await checkAllFxmlFiles();
 	// *.fxml files may be in the bin directory. Skip them.
 	const fxmlWatcher = vscode.workspace.createFileSystemWatcher('src/**/*.fxml');
 	// Change of *.fxml file is detected when the file is saved.

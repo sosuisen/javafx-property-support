@@ -22,7 +22,6 @@ export function processFxmlFile(fullPath: string) {
         const fxmlContent = fs.readFileSync(fullPath, 'utf-8');
         let workspaceFolder: vscode.WorkspaceFolder | undefined;
         if (fxmlDictionary[fullPath]) {
-
             workspaceFolder = fxmlDictionary[fullPath].workspaceFolder;
         }
         else {

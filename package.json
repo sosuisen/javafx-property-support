@@ -15,7 +15,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:java"
+    "onLanguage:java",
+    "onLanguage:fxml"
   ],
   "main": "./out/extension.js",
   "extensionDependencies": [
@@ -45,6 +46,16 @@
         "aliases": [
           "Java",
           "java"
+        ]
+      },
+      {
+        "id": "fxml",
+        "extensions": [
+          ".fxml"
+        ],
+        "aliases": [
+          "FXML",
+          "fxml"
         ]
       }
     ],

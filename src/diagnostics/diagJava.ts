@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { getFxmlByControllerFilePath, findClassDeclarationLine, hasFxIdField } from '../util';
 import { fxmlDictionary } from '../fxmlDictionary';
 
-const diagnosticCollection = vscode.languages.createDiagnosticCollection('fxml');
+const diagnosticCollection = vscode.languages.createDiagnosticCollection('fxid-diagnostic');
 
 async function createDocumentFromText(
     content: string,

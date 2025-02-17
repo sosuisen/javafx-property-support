@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import { fxmlDictionary } from '../fxmlDictionary';
 import { TagAndFxId } from '../type';
 
+const diagnosticCollection = vscode.languages.createDiagnosticCollection('fxcontroller-diagnostic');
+
 function getControllerFilePath(
     controllerClassName: string,
     workspaceRoot: vscode.Uri
@@ -40,8 +42,8 @@ export function processFxmlFile(fullPath: string) {
             controllerFilePath = getControllerFilePath(controllerClassName, workspaceFolder.uri);
         }
         else {
-            console.error(`No fx:controller for ${fullPath}`);
-            return;
+            controllerFilePath = "";
+            //            console.error(`No fx:controller for ${fullPath}`);
         }
 
         const fxIdRegex = /<(\w+)[^>]*fx:id\s*=\s*"([^"]+)"/g;
@@ -63,6 +65,23 @@ export function processFxmlFile(fullPath: string) {
             controllerClassName,
             tagAndFxIds,
         };
+
+        const diagnostics: vscode.Diagnostic[] = [];
+        let message = "";
+        if (controllerFilePath === "") {
+            message = `Missing fx:controller`;
+        }
+        else if (!fs.existsSync(controllerFilePath)) {
+            message = `Missing ${controllerFilePath}`;
+        }
+        if (message !== "") {
+            const range = new vscode.Range(0, 0, 0, 0);
+            const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
+            diagnostics.push(diagnostic);
+
+            diagnosticCollection.delete(vscode.Uri.file(fullPath));
+            diagnosticCollection.set(vscode.Uri.file(fullPath), diagnostics);
+        }
     } catch (error) {
         console.error(`Error parsing FXML file ${fullPath}:`, error);
     }

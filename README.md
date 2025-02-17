@@ -35,7 +35,7 @@ Result:
 Generates a builder class for a classe in javafx.scene.* packages.
 
 1. 🏃‍➡️ Move the cursor over a "new ClassName()" expression.
-- ClassName must be in the javafx.scene.* packages.
+- THe class must be in the javafx.scene.* packages.
 - The class name must be a canonical name or resolved through an import.
 
 <img src="images/builder_01.png" width="200">

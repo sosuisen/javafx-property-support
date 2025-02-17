@@ -82,4 +82,4 @@ https://github.com/sosuisen/javafx-controller-support/issues
 
 ### 1.0.0
 
-Initial release.
+- Initial release.

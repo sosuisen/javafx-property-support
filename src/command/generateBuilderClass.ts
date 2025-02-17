@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { TextDocumentIdentifier, Position, TextDocumentPositionParams } from 'vscode-languageclient';
 import { Range, SymbolKind } from "vscode-languageclient";
 import path from 'path';
+import { findMainClass } from '../util';
 
 enum TypeHierarchyDirection {
     children,
@@ -44,14 +45,29 @@ export async function generateBuilderClass() {
     }
 
     const cursorPosition = editor.selection.active;
-    const document = editor.document;
+    const cursorLine = cursorPosition.line;
+    const line = editor.document.lineAt(cursorLine).text;
 
+    const constructorPattern = /new\s+([\w.]+)\s*\(/;
+    const match = line.match(constructorPattern);
+    if (!match) {
+        return;
+    }
+    const targetClassFullName = match[1];
+    const classNamePattern = /new\s+[\w.]+?\.(\w+?)\s*\(/;
+    const classMatch = line.match(classNamePattern);
+    // MyClass
+    const targetClassNameOnly = classMatch ? classMatch[1] : targetClassFullName;
+    const classStartAt = line.indexOf(targetClassNameOnly + "()");
+    const classPosition = new vscode.Position(cursorPosition.line, classStartAt + 1);
+
+    const document = editor.document;
     const textDocument: TextDocumentIdentifier = TextDocumentIdentifier.create(document.uri.toString());
-    const position: Position = Position.create(cursorPosition.line, cursorPosition.character);
     const params: TextDocumentPositionParams = {
         textDocument: textDocument,
-        position: position,
+        position: classPosition,
     };
+
     let lspItem: LSPTypeHierarchyItem;
     const direction = TypeHierarchyDirection.parents;
     if (cancelTokenSource) {
@@ -69,8 +85,8 @@ export async function generateBuilderClass() {
         return;
     }
 
-    const targetClassFullName = lspItem.detail + '.' + lspItem.name;
-    const targetClassName = lspItem.name;
+    // const targetClassFullName = lspItem.detail + '.' + lspItem.name;
+    // const targetClassName = lspItem.name;
 
     if (!lspItem) {
         vscode.window.showInformationMessage('クラスが見つかりません。');
@@ -151,26 +167,17 @@ export async function generateBuilderClass() {
     // Map から配列に変換
     const methodInfoList = Array.from(methodMap.values());
 
-    const currentFileUri = vscode.Uri.parse(document.uri.toString());
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(currentFileUri);
-    if (!workspaceFolder) {
-        console.error('ワークスペースフォルダが見つかりません。');
-        return;
-    }
-
-    const mainClass = await findMainClass(workspaceFolder);
+    const mainClass = await findMainClass(document.uri);
     if (mainClass) {
-        console.log(`メインクラスのパス: ${mainClass.filePath}`);
-
         // カーソル行の new TargetClassName を new TargetClassNameBuilder に置換
         const line = editor.document.lineAt(cursorPosition.line).text;
-        const newPattern = new RegExp(`new\\s+${targetClassName}\\s*\\(`);
+        const newPattern = new RegExp(`new\\s+${targetClassFullName}\\s*\\(`);
         const match = line.match(newPattern);
         if (match) {
             const startPos = match.index!;
             const edit = new vscode.WorkspaceEdit();
 
-            const builderClassName = `${targetClassName}Builder`;
+            const builderClassName = `${targetClassNameOnly}Builder`;
             const builderClassFullName = `${mainClass.packageName}.jfxbuilder.${builderClassName}`;
             // 既存のimport文をチェック
             const documentText = editor.document.getText();
@@ -195,15 +202,14 @@ export async function generateBuilderClass() {
                 cursorPosition.line,
                 startPos + 4,
                 cursorPosition.line,
-                startPos + 4 + targetClassName.length
+                startPos + 4 + targetClassFullName.length
             );
             var indent = ' '.repeat(startPos + 8);
             edit.replace(editor.document.uri, range, `${builderClassName}()\n${indent}.build`);
             await vscode.workspace.applyEdit(edit);
         }
 
-
-        await createBuilderClass(methodInfoList, mainClass, targetClassName);
+        await createBuilderClass(methodInfoList, mainClass, targetClassNameOnly);
     } else {
         console.log('メインクラスが見つかりません。');
     }
@@ -243,33 +249,6 @@ function processGenericTypes(text: string): string[] {
         result.push(current.trim());
     }
     return result;
-}
-
-async function findMainClass(workspaceFolder: vscode.WorkspaceFolder): Promise<{ packageName: string, filePath: string } | null> {
-    const pattern = new vscode.RelativePattern(workspaceFolder, 'src/**/*.java');
-    const files = await vscode.workspace.findFiles(pattern);
-
-    for (const file of files) {
-        try {
-            const document = await vscode.workspace.openTextDocument(file);
-            const content = document.getText();
-
-            const packageMatch = content.match(/package\s+([^;]+);/);
-            if (packageMatch) {
-                const packageName = packageMatch[1].trim();
-                const applicationPattern = /class\s+\w+\s+extends\s+(?:javafx\.application\.)?(Application)/;
-                if (applicationPattern.test(content)) {
-                    return { packageName, filePath: file.fsPath };
-                }
-            }
-        }
-        catch (e) {
-            console.error(`Error processing file ${file.fsPath}:`, e);
-            continue;
-        }
-    }
-
-    return null;
 }
 
 async function createBuilderClass(methodInfoList: MethodInfo[], mainClass: { packageName: string, filePath: string }, targetClassName: string) {

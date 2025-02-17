@@ -20,6 +20,15 @@ This VSCode extension provides support for FXML controllers in JavaFX projects.
 
 <img src="images/no_fxid_hint.png" width="300">
 
+#### 📺 Displays diagnostics when an invalid fx:controller.
+
+*fx:controller must be specified in the FXML file.*
+<img src="images/fxcontroller_01.png" width="400">
+
+*Controller class not found.*
+<img src="images/fxcontroller_02.png" width="500">
+
+
 ### (2) 📢 Provides a Code Lens option to add an initialize method if it is missing from the Controller class.
 
 Press "Add public void initialize() method" to add the initialize method.
@@ -37,6 +46,7 @@ Generates a builder class for a classe in javafx.scene.* packages.
 1. 🏃‍➡️ Move the cursor over a "new ClassName()" expression.
 - THe class must be in the javafx.scene.* packages.
 - The class name must be a canonical name or resolved through an import.
+- Cannot generate builder class if a class has no setXXX methods.
 
 <img src="images/builder_01.png" width="200">
 

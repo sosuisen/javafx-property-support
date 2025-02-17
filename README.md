@@ -23,9 +23,11 @@ This VSCode extension provides support for FXML controllers in JavaFX projects.
 #### 📺 Displays diagnostics when an invalid fx:controller.
 
 *fx:controller must be specified in the FXML file.*
+
 <img src="images/fxcontroller_01.png" width="400">
 
 *Controller class not found.*
+
 <img src="images/fxcontroller_02.png" width="500">
 
 

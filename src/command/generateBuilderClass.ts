@@ -197,7 +197,8 @@ export async function generateBuilderClass() {
                 cursorPosition.line,
                 startPos + 4 + targetClassName.length
             );
-            edit.replace(editor.document.uri, range, `${builderClassName}`);
+            var indent = ' '.repeat(startPos + 8);
+            edit.replace(editor.document.uri, range, `${builderClassName}()\n${indent}.build`);
             await vscode.workspace.applyEdit(edit);
         }
 

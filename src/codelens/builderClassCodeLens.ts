@@ -8,7 +8,7 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
     public readonly onDidChangeCodeLenses: vscode.Event<void> = this._onDidChangeCodeLenses.event;
 
     constructor() {
-        // カーソル位置が変更されたときにCodeLensを更新
+        // Update CodeLens when cursor position changes
         vscode.window.onDidChangeTextEditorSelection(() => {
             this._onDidChangeCodeLenses.fire();
         });
@@ -38,7 +38,7 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
             const classStartAt = line.indexOf(targetClassNameOnly + "()");
             const classPosition = new vscode.Position(cursorPosition.line, classStartAt + 1);
 
-            // 型定義を取得
+            // Get type definitions
             try {
                 const typeDefinitions = await vscode.commands.executeCommand<vscode.Location[]>(
                     'vscode.executeTypeDefinitionProvider',
@@ -46,7 +46,7 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
                     classPosition
                 );
 
-                // javafx.scene.* のクラスのnewが見つかった場合のみCodeLensを表示
+                // Show CodeLens only if new of javafx.scene.* Class is found
                 if (!typeDefinitions || typeDefinitions.length === 0 ||
                     !typeDefinitions[0].uri.path.includes('javafx.scene.')
                 ) {

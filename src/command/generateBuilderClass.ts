@@ -35,12 +35,12 @@ let cancelTokenSource: vscode.CancellationTokenSource | undefined;
 export async function generateBuilderClass() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-        vscode.window.showErrorMessage('エディタが開かれていません。');
+        vscode.window.showErrorMessage('No active editor found.');
         return;
     }
 
     if (editor.document.languageId !== 'java') {
-        vscode.window.showErrorMessage('Javaファイルではありません。');
+        vscode.window.showErrorMessage('Not a Java file.');
         return;
     }
 
@@ -56,7 +56,6 @@ export async function generateBuilderClass() {
     const targetClassFullName = match[1];
     const classNamePattern = /new\s+[\w.]+?\.(\w+?)\s*\(/;
     const classMatch = line.match(classNamePattern);
-    // MyClass
     const targetClassNameOnly = classMatch ? classMatch[1] : targetClassFullName;
     const classStartAt = line.indexOf(targetClassNameOnly + "()");
     const classPosition = new vscode.Position(cursorPosition.line, classStartAt + 1);
@@ -89,7 +88,7 @@ export async function generateBuilderClass() {
     // const targetClassName = lspItem.name;
 
     if (!lspItem) {
-        vscode.window.showInformationMessage('クラスが見つかりません。');
+        vscode.window.showInformationMessage('Class not found.');
         return;
     }
 
@@ -97,18 +96,18 @@ export async function generateBuilderClass() {
     const classQueue: LSPTypeHierarchyItem[] = [lspItem];
     const methodMap = new Map<string, MethodInfo>();
 
-    // キューを使用してクラス階層を処理
+    // Process class hierarchy using queue
     while (classQueue.length > 0) {
         const currentItem = classQueue.shift()!;
         const classKey = `${currentItem.uri}#${currentItem.name}`;
 
-        // 処理済みのクラスはスキップ
+        // Skip already processed classes
         if (processedClasses.has(classKey)) {
             continue;
         }
         processedClasses.add(classKey);
 
-        // シンボル情報を取得
+        // Get symbol information
         const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
             'vscode.executeDocumentSymbolProvider',
             vscode.Uri.parse(currentItem.uri)
@@ -121,28 +120,28 @@ export async function generateBuilderClass() {
             );
 
             if (classSymbol) {
-                // setterメソッドを収集
+                // Collect setter methods
                 classSymbol.children
                     .filter(symbol =>
                         symbol.kind === vscode.SymbolKind.Method &&
                         symbol.name.startsWith('set')
                     )
                     .forEach(symbol => {
-                        // メソッド名とパラメータを分離
+                        // Separate method name and parameters
                         const methodMatch = symbol.name.match(/^(set\w+)\((.*)\)/);
                         if (methodMatch) {
                             const [, methodName, params] = methodMatch;
                             const dataTypeList = processGenericTypes(params);
 
-                            // メソッド名から'set'を除いて小文字にしたものをキーとして使用
+                            // Use lowercase name without 'set' as key
                             const key = methodName.substring(3).charAt(0).toLowerCase() +
                                 methodName.substring(4);
 
-                            // まだ登録されていないメソッドのみを追加（親クラスのメソッドは無視）
+                            // Add only methods that haven't been registered yet (ignore parent class methods)
                             if (!methodMap.has(key)) {
-                                // Deprecatedの処理
+                                // Handle deprecated methods
                                 const deprecated = ['LayoutFlags', 'ParentTraversalEngine'];
-                                // 引数のデータ型にdeprecatedが含まれる場合は、スキップ
+                                // Skip if data type contains deprecated types
                                 if (dataTypeList.some(type => deprecated.some(d => type.includes(d)))) {
                                     return;
                                 }
@@ -158,18 +157,17 @@ export async function generateBuilderClass() {
             }
         }
 
-        // 親クラスをキューに追加
+        // Add parent classes to queue
         if (currentItem.parents && currentItem.parents.length > 0) {
             classQueue.push(...currentItem.parents);
         }
     }
 
-    // Map から配列に変換
+    // Convert Map to array
     const methodInfoList = Array.from(methodMap.values());
 
     const mainClass = await findMainClass(document.uri);
     if (mainClass) {
-        // カーソル行の new TargetClassName を new TargetClassNameBuilder に置換
         const line = editor.document.lineAt(cursorPosition.line).text;
         const newPattern = new RegExp(`new\\s+${targetClassFullName}\\s*\\(`);
         const match = line.match(newPattern);
@@ -179,25 +177,23 @@ export async function generateBuilderClass() {
 
             const builderClassName = `${targetClassNameOnly}Builder`;
             const builderClassFullName = `${mainClass.packageName}.jfxbuilder.${builderClassName}`;
-            // 既存のimport文をチェック
+            // Check existing import statements
             const documentText = editor.document.getText();
             const importPattern = new RegExp(`^import\\s+${builderClassFullName};`, 'm');
 
             if (!importPattern.test(documentText)) {
-                // package行を探す
+                // Find package statement
                 const packageMatch = documentText.match(/^package\s+[^;]+;/m);
 
                 if (packageMatch) {
                     const packageEndPos = editor.document.positionAt(packageMatch.index! + packageMatch[0].length);
-                    // package行の後にimport文を追加
+                    // Add import statement after package statement
                     edit.insert(editor.document.uri, new vscode.Position(packageEndPos.line + 1, 0),
                         `\nimport ${builderClassFullName};\n`);
-
                 }
             }
 
-
-            // new TargetClassName を new TargetClassNameBuilder に置換
+            // Replace 'new TargetClassName' with 'new TargetClassNameBuilder'
             const range = new vscode.Range(
                 cursorPosition.line,
                 startPos + 4,
@@ -209,9 +205,9 @@ export async function generateBuilderClass() {
             await vscode.workspace.applyEdit(edit);
         }
 
-        await createBuilderClass(methodInfoList, mainClass, targetClassNameOnly);
+        await createBuilderClassFile(methodInfoList, mainClass, targetClassNameOnly);
     } else {
-        console.log('メインクラスが見つかりません。');
+        console.log('Main class not found.');
     }
 }
 
@@ -251,19 +247,19 @@ function processGenericTypes(text: string): string[] {
     return result;
 }
 
-async function createBuilderClass(methodInfoList: MethodInfo[], mainClass: { packageName: string, filePath: string }, targetClassName: string) {
+async function createBuilderClassFile(methodInfoList: MethodInfo[], mainClass: { packageName: string, filePath: string }, targetClassName: string) {
     const mainClassPath = mainClass.filePath;
     const mainClassDir = mainClassPath.substring(0, mainClassPath.lastIndexOf(path.sep));
 
-    // jfxbuilderフォルダのパスを作成
+    // Create jfxbuilder folder path
     const builderDirPath = `${mainClassDir}/jfxbuilder`;
     const builderFilePath = `${builderDirPath}/${targetClassName}Builder.java`;
 
     try {
-        // Builderメソッドを生成
+        // Generate Builder methods
         const builderMethods = methodInfoList
             .map(info => {
-                const methodName = info.methodName.substring(3); // 'set'を除去
+                const methodName = info.methodName.substring(3); // Remove 'set'
                 const firstChar = methodName.charAt(0).toLowerCase();
                 const builderMethodName = firstChar + methodName.slice(1);
 
@@ -282,7 +278,7 @@ async function createBuilderClass(methodInfoList: MethodInfo[], mainClass: { pac
 
                 const paramList = paramPairs.join(', ');
 
-                // パラメータリストに<T>が含まれる場合、ジェネリック型パラメータを追加
+                // Add generic type parameter if <T> is in parameter list
                 const hasGenericType = paramList.includes('<T>');
                 const methodSignature = hasGenericType ?
                     `    public <T extends Event> ${targetClassName}Builder ${builderMethodName}(${paramList})` :
@@ -291,7 +287,7 @@ async function createBuilderClass(methodInfoList: MethodInfo[], mainClass: { pac
             })
             .join('\n\n');
 
-        // Builderクラスのコードを生成
+        // Generate Builder class code
         let builderCode = `package ${mainClass.packageName}.jfxbuilder;
 
 import javafx.scene.*;
@@ -319,21 +315,21 @@ ${builderMethods}
 }
 `;
 
-        // フォルダが存在しない場合は作成
+        // Create folder if it doesn't exist
         if (!fs.existsSync(builderDirPath)) {
             fs.mkdirSync(builderDirPath);
         }
 
-        // ファイルを作成
+        // Create file
         fs.writeFileSync(builderFilePath, builderCode);
-        console.log(`Builderクラスを作成しました: ${builderFilePath}`);
+        console.log(`Builder class created: ${builderFilePath}`);
 
-        // 0.5秒おきに20回診断を実行
+        // Run diagnostics every 0.5 seconds for 20 times
         for (let i = 0; i < 20; i++) {
             await new Promise(resolve => setTimeout(resolve, 500));
             const diagnostics = vscode.languages.getDiagnostics(vscode.Uri.file(builderFilePath));
             if (diagnostics.length > 0) {
-                // Diagnosticsがある行をコメントアウト
+                // Comment out lines with diagnostics
                 const lines = builderCode.split('\n');
                 diagnostics.forEach(diagnostic => {
                     const lineNumber = diagnostic.range.start.line;
@@ -355,6 +351,6 @@ ${builderMethods}
         builderCode = builderCode.replace(/\n+/g, '\n');
         fs.writeFileSync(builderFilePath, builderCode);
     } catch (error) {
-        console.error('Builderクラスの作成に失敗しました:', error);
+        console.error('Failed to create Builder class:', error);
     }
 } 

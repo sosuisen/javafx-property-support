@@ -32,7 +32,10 @@ Result:
 
 Generates a builder class for a classe in javafx.scene package.
 
-1. 🏃‍➡️ Move the cursor over a class in javafx.scene package.
+1. 🏃‍➡️ Move the cursor over a "new ClassName()" expression.
+- ClassName must be in the javafx.scene package.
+- The class name must be a canonical name or resolved through an import.
+
 
 <img src="images/builder_01.png" width="200">
 
@@ -44,11 +47,11 @@ Generates a builder class for a classe in javafx.scene package.
 
 3. 🎁 A Builder class is generated under the jfxbuilder directory.
 
+- The Builder class is named by appending the suffix "-Builder" to the original class name.
+
 <img src="images/builder_03.png" width="200">
 
-4. ⚙️ The Builder class is named by appending the suffix "-Builder" to the original class name.
-
-- The Builder class has the same setter methods as the original class, but the "set-" prefix is omitted.
+4. ⚙️ The Builder class has the same setter methods as the original class, but the "set-" prefix is omitted.
 
 - In the example below, the Builder class for the Button class is ButtonBuilder, and instead of the setMaxSize method, it has a maxSize method. 
 

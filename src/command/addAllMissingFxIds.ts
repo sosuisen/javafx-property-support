@@ -5,14 +5,14 @@ import { fxmlDictionary } from '../fxmlDictionary';
 export async function addAllMissingFxIds() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-        vscode.window.showErrorMessage('エディタが開かれていません。');
+        vscode.window.showErrorMessage('Editor is not open.');
         return;
     }
 
     const document = editor.document;
     const fxmlPath = getFxmlByControllerFilePath(document.uri.fsPath);
     if (!fxmlPath) {
-        vscode.window.showErrorMessage('対応するFXMLファイルが見つかりません。');
+        vscode.window.showErrorMessage('Corresponding FXML file not found.');
         return;
     }
 
@@ -22,7 +22,7 @@ export async function addAllMissingFxIds() {
     const edit = new vscode.WorkspaceEdit();
     let classDeclarationLine = findClassDeclarationLine(javaText);
     if (classDeclarationLine === -1) {
-        vscode.window.showErrorMessage('クラス定義が見つかりません。');
+        vscode.window.showErrorMessage('Class definition not found.');
         return;
     }
 

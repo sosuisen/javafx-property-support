@@ -169,10 +169,11 @@ export async function generateBuilderClass() {
     const mainClass = await findMainClass(document.uri);
     if (mainClass) {
         const line = editor.document.lineAt(cursorPosition.line).text;
-        const newPattern = new RegExp(`new\\s+${targetClassFullName}\\s*\\(`);
+        const newPattern = new RegExp(`(new\\s+)${targetClassFullName}\\s*\\(`);
         const match = line.match(newPattern);
         if (match) {
             const startPos = match.index!;
+            const newLength = match[1].length;
             const edit = new vscode.WorkspaceEdit();
 
             const builderClassName = `${targetClassNameOnly}Builder`;
@@ -196,9 +197,9 @@ export async function generateBuilderClass() {
             // Replace 'new TargetClassName' with 'new TargetClassNameBuilder'
             const range = new vscode.Range(
                 cursorPosition.line,
-                startPos + 4,
+                startPos + newLength,
                 cursorPosition.line,
-                startPos + 4 + targetClassFullName.length
+                startPos + newLength + targetClassFullName.length
             );
             var indent = ' '.repeat(startPos + 8);
             edit.replace(editor.document.uri, range, `${builderClassName}()\n${indent}.build`);

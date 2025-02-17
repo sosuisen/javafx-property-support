@@ -24,7 +24,7 @@ export async function addInitializeMethod(document: vscode.TextDocument, classEn
     const insertPosition = new vscode.Position(classEndLine, 0);
     const initializeMethod = `
 ${indentUnit}public void initialize() {
-${indentUnit}${indentUnit}// Hint: initialize() is called after @FXML fields are injected
+${indentUnit}${indentUnit}// Hint: initialize() will be called when the associated FXML has been completely loaded.
 ${indentUnit}}
 `;
     edit.insert(document.uri, insertPosition, initializeMethod);

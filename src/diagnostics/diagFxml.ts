@@ -5,6 +5,10 @@ import { TagAndFxId } from '../type';
 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('fxcontroller-diagnostic');
 
+export function deleteFxmlDiagnostic(fullPath: string) {
+    diagnosticCollection.delete(vscode.Uri.file(fullPath));
+}
+
 function getControllerFilePath(
     controllerClassName: string,
     workspaceRoot: vscode.Uri
@@ -42,7 +46,7 @@ export function processFxmlFile(fullPath: string) {
             controllerFilePath = getControllerFilePath(controllerClassName, workspaceFolder.uri);
         }
         else {
-            controllerFilePath = "";
+            controllerFilePath = null;
             //            console.error(`No fx:controller for ${fullPath}`);
         }
 
@@ -68,7 +72,8 @@ export function processFxmlFile(fullPath: string) {
 
         const diagnostics: vscode.Diagnostic[] = [];
         let message = "";
-        if (controllerFilePath === "") {
+        diagnosticCollection.delete(vscode.Uri.file(fullPath));
+        if (controllerFilePath === null) {
             message = `Missing fx:controller`;
         }
         else if (!fs.existsSync(controllerFilePath)) {
@@ -78,8 +83,6 @@ export function processFxmlFile(fullPath: string) {
             const range = new vscode.Range(0, 0, 0, 0);
             const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
             diagnostics.push(diagnostic);
-
-            diagnosticCollection.delete(vscode.Uri.file(fullPath));
             diagnosticCollection.set(vscode.Uri.file(fullPath), diagnostics);
         }
     } catch (error) {

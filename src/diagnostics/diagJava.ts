@@ -5,20 +5,17 @@ import { fxmlDictionary } from '../fxmlDictionary';
 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('fxid-diagnostic');
 
-async function createDocumentFromText(
-    content: string,
-    language: string = 'plaintext'
-): Promise<vscode.TextDocument> {
-    const document = await vscode.workspace.openTextDocument({
-        content: content,
-        language: language
-    });
-    return document;
+export function deleteJavaDiagnostic(fullPath: string | null) {
+    if (fullPath) {
+        diagnosticCollection.delete(vscode.Uri.file(fullPath));
+    }
 }
 
-function processJavaDocument(fxmlPath: string, document: vscode.TextDocument) {
-    const fxmlData = fxmlDictionary[fxmlPath];
+export function processJavaDocument(document: vscode.TextDocument) {
+    const path = getFxmlByControllerFilePath(document.uri.fsPath);
+    if (!path) { return; }
 
+    const fxmlData = fxmlDictionary[path];
     const diagnostics: vscode.Diagnostic[] = [];
 
     const fxIdPattern = /@FXML\s+\S+\s+\S+\s+(\w+)\s*;/g;
@@ -57,19 +54,3 @@ function processJavaDocument(fxmlPath: string, document: vscode.TextDocument) {
     diagnosticCollection.set(document.uri, diagnostics);
 }
 
-export async function processJavaFileByPath(fullPath: string) {
-    const fxmlPath = getFxmlByControllerFilePath(fullPath);
-    if (!fxmlPath) { return; }
-
-    const javaText = fs.readFileSync(fullPath, 'utf-8');
-    const document = await createDocumentFromText(javaText, 'java');
-
-    processJavaDocument(fxmlPath, document);
-}
-
-export async function processJavaFileByTextDocument(document: vscode.TextDocument) {
-    const fxmlPath = getFxmlByControllerFilePath(document.uri.fsPath);
-    if (!fxmlPath) { return; }
-
-    processJavaDocument(fxmlPath, document);
-}

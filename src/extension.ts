@@ -7,8 +7,9 @@ import { BuilderClassCodeLensProvider } from './codelens/builderClassCodeLens';
 import { fxmlDictionary } from './fxmlDictionary';
 import { ControllerSupportLensProvider } from './codelens/controllerSupportCodeLens';
 import { MissingFxIdProvider } from './codeactions/missingFxId';
-import { processJavaFileByPath, processJavaFileByTextDocument } from './diagnostics/diagJava';
-import { processFxmlFile } from './diagnostics/diagFxml';
+import { deleteJavaDiagnostic, processJavaDocument } from './diagnostics/diagJava';
+import { deleteFxmlDiagnostic, processFxmlFile } from './diagnostics/diagFxml';
+import path from 'path';
 
 // This method is called when the extension is activated
 export async function activate(context: vscode.ExtensionContext) {
@@ -33,24 +34,35 @@ export async function activate(context: vscode.ExtensionContext) {
 	function checkAllOpenedJavaFiles() {
 		vscode.workspace.textDocuments.forEach(document => {
 			if (document.languageId === 'java') {
-				processJavaFileByTextDocument(document);
+				processJavaDocument(document);
 			}
 		});
 	}
 	// Check all *.fxml files.
 	await checkAllFxmlFiles();
-	// *.fxml files may be in the bin directory. Skip them.
-	const fxmlWatcher = vscode.workspace.createFileSystemWatcher('src/**/*.fxml');
+	const fxmlWatcher = vscode.workspace.createFileSystemWatcher('**/*.fxml');
 	// Change of *.fxml file is detected when the file is saved.
 	fxmlWatcher.onDidChange(uri => {
+		// *.fxml files may be in the bin directory. Skip them.
+		if (!uri.fsPath.includes('src' + path.sep)) {
+			return;
+		}
 		processFxmlFile(uri.fsPath);
 		checkAllOpenedJavaFiles();
 	});
 	fxmlWatcher.onDidCreate(uri => {
+		if (!uri.fsPath.includes('src' + path.sep)) {
+			return;
+		}
 		processFxmlFile(uri.fsPath);
 		checkAllOpenedJavaFiles();
 	});
 	fxmlWatcher.onDidDelete(uri => {
+		if (!uri.fsPath.includes('src' + path.sep)) {
+			return;
+		}
+		deleteJavaDiagnostic(fxmlDictionary[uri.fsPath].controllerFilePath);
+		deleteFxmlDiagnostic(uri.fsPath);
 		delete fxmlDictionary[uri.fsPath];
 		checkAllOpenedJavaFiles();
 	});
@@ -59,14 +71,34 @@ export async function activate(context: vscode.ExtensionContext) {
 	 * Observe changes of *.java files.
 	 */
 	checkAllOpenedJavaFiles();
-	const javaWatcher = vscode.workspace.createFileSystemWatcher('src/**/*.java');
+	const javaWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
 	// Change of *.java file is detected when the file is saved.
-	javaWatcher.onDidChange(uri => processJavaFileByPath(uri.fsPath));
-	javaWatcher.onDidCreate(uri => processJavaFileByPath(uri.fsPath));
+	javaWatcher.onDidChange(async uri => {
+		if (!uri.fsPath.includes('src' + path.sep)) {
+			return;
+		}
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(uri.fsPath));
+		processJavaDocument(document);
+	});
+	javaWatcher.onDidCreate(async uri => {
+		if (!uri.fsPath.includes('src' + path.sep)) {
+			return;
+		}
+		console.log('create java file', uri.fsPath);
+		await checkAllFxmlFiles(); // check fx:controller
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(uri.fsPath));
+		processJavaDocument(document);
+	});
 	javaWatcher.onDidDelete(uri => {
+		if (!uri.fsPath.includes('src' + path.sep)) {
+			return;
+		}
+		deleteJavaDiagnostic(uri.fsPath);
 		const fxmlPath = getFxmlByControllerFilePath(uri.fsPath);
 		if (fxmlPath) {
-			delete fxmlDictionary[fxmlPath];
+			processFxmlFile(fxmlPath); // check fx:controller
+			fxmlDictionary[fxmlPath].controllerFilePath = null;
+			fxmlDictionary[fxmlPath].controllerClassName = null;
 		}
 	});
 
@@ -74,7 +106,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	vscode.workspace.onDidChangeTextDocument(event => {
 		const document = event.document;
 		if (document.languageId === 'java') {
-			processJavaFileByTextDocument(document);
+			processJavaDocument(document);
 		}
 	});
 

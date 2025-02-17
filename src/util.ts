@@ -13,9 +13,28 @@ export function getFxmlByControllerFilePath(controllerFilePath: string): string 
 
 export function findClassDeclarationLine(text: string): number {
     const lines = text.split('\n');
+    let startBraceCount = 0;
+    let endBraceCount = 0;
+    let classStartLine = -1;
+
     for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('class')) {
-            return i;
+        const line = lines[i];
+        const classPattern = /class\s+[A-Z]/;
+        if (classPattern.test(line)) {
+            classStartLine = i;
+        }
+        if (classStartLine >= 0) {
+            startBraceCount += (line.match(/{/g) || []).length;
+            endBraceCount += (line.match(/}/g) || []).length;
+            if (startBraceCount > 0 && startBraceCount - endBraceCount === 0) {
+                if (i > classStartLine) {
+                    return classStartLine;
+                }
+                else {
+                    // Skip if class body is empty
+                    return -1;
+                }
+            }
         }
     }
     return -1;
@@ -23,19 +42,27 @@ export function findClassDeclarationLine(text: string): number {
 
 export function findClassEndLine(text: string): number {
     const lines = text.split('\n');
-    let braceCount = 0;
-    let classStartFound = false;
+    let startBraceCount = 0;
+    let endBraceCount = 0;
+    let classStartLine = -1;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        if (!classStartFound && line.includes('class')) {
-            classStartFound = true;
+        const classPattern = /class\s+[A-Z]/;
+        if (classPattern.test(line)) {
+            classStartLine = i;
         }
-        if (classStartFound) {
-            braceCount += (line.match(/{/g) || []).length;
-            braceCount -= (line.match(/}/g) || []).length;
-            if (braceCount === 0) {
-                return i;
+        if (classStartLine >= 0) {
+            startBraceCount += (line.match(/{/g) || []).length;
+            endBraceCount += (line.match(/}/g) || []).length;
+            if (startBraceCount > 0 && startBraceCount - endBraceCount === 0) {
+                if (i > classStartLine) {
+                    return i;
+                }
+                else {
+                    // Skip if class body is empty
+                    return -1;
+                }
             }
         }
     }

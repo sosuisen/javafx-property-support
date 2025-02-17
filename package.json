@@ -18,6 +18,9 @@
     "onLanguage:java"
   ],
   "main": "./out/extension.js",
+  "extensionDependencies": [
+    "redhat.java"
+  ],
   "contributes": {
     "commands": [
       {

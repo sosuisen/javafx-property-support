@@ -35,7 +35,7 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
             const classMatch = line.match(classNamePattern);
             // MyClass
             const targetClassNameOnly = classMatch ? classMatch[1] : targetClassFullName;
-            const classStartAt = line.indexOf(targetClassNameOnly + "()");
+            const classStartAt = line.indexOf(targetClassNameOnly + "(");
             const classPosition = new vscode.Position(cursorPosition.line, classStartAt + 1);
 
             // Get type definitions

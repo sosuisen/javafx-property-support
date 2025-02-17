@@ -57,7 +57,7 @@ export async function generateBuilderClass() {
     const classNamePattern = /new\s+[\w.]+?\.(\w+?)\s*\(/;
     const classMatch = line.match(classNamePattern);
     const targetClassNameOnly = classMatch ? classMatch[1] : targetClassFullName;
-    const classStartAt = line.indexOf(targetClassNameOnly + "()");
+    const classStartAt = line.indexOf(targetClassNameOnly + "(");
     const classPosition = new vscode.Position(cursorPosition.line, classStartAt + 1);
 
     const document = editor.document;
@@ -165,6 +165,11 @@ export async function generateBuilderClass() {
 
     // Convert Map to array
     const methodInfoList = Array.from(methodMap.values());
+
+    if (methodInfoList.length === 0) {
+        vscode.window.showInformationMessage('Cannot generate builder class because no setter methods found.');
+        return;
+    }
 
     const mainClass = await findMainClass(document.uri);
     if (mainClass) {

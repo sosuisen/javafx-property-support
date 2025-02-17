@@ -1,15 +1,15 @@
-# JavaFX Controller Support README
+# JavaFX Controller Support
 
 This VSCode extension provides support for FXML controllers in JavaFX projects.
 
 - Detection and correction of fx:id errors.
 - Builder class generator for javafx.scene.* classes.
 
-## Features
+# Features
 
-### (1) 🔔 Detection and correction of fx:id errors.
+## (1) 🔔 Detection and correction of fx:id errors.
 
-#### 🔍 Displays diagnostics when an fx:id in the FXML does not have a corresponding @FXML field in the controller class.
+### 🔍 Displays diagnostics when an fx:id in the FXML does not have a corresponding @FXML field in the controller class.
 
 🛠️ Automatically adds the necessary @FXML fields for fx:id individually through Quick Fix.
 
@@ -19,11 +19,11 @@ This VSCode extension provides support for FXML controllers in JavaFX projects.
 
 <img src="images/no_field_lens.png" width="200">
 
-#### 📺 Displays diagnostics when an @FXML field specified in the controller class does not have a corresponding fx:id in the FXML.
+### 📺 Displays diagnostics when an @FXML field specified in the controller class does not have a corresponding fx:id in the FXML.
 
 <img src="images/no_fxid_hint.png" width="300">
 
-#### 📺 Displays diagnostics when an invalid fx:controller.
+### 📺 Displays diagnostics when an invalid fx:controller.
 
 *fx:controller must be specified in the FXML file.*
 
@@ -34,7 +34,7 @@ This VSCode extension provides support for FXML controllers in JavaFX projects.
 <img src="images/fxcontroller_02.png" width="500">
 
 
-### (2) 📢 Provides a Code Lens option to add an initialize method if it is missing from the Controller class.
+## (2) 📢 Provides a Code Lens option to add an initialize method if it is missing from the Controller class.
 
 Press "Add public void initialize() method" to add the initialize method.
 
@@ -44,30 +44,30 @@ Result:
 
 <img src="images/initialize_result.png" width="400">
 
-### (3) 🚧 Builder class generator
+## (3) 🚧 Builder class generator
 
 Generates a builder class for a classe in javafx.scene.* packages.
 
-1. 🏃‍➡️ Move the cursor over a "new ClassName()" expression.
+### 1. 🏃‍➡️ Move the cursor over a "new ClassName()" expression.
 - THe class must be in the javafx.scene.* packages.
 - The class name must be a canonical name or resolved through an import.
 - Cannot generate builder class if a class has no setXXX methods.
 
 <img src="images/builder_01.png" width="200">
 
-2. 🔧 Press "Generate Builder Class" Code Lens.
+### 2. 🔧 Press "Generate Builder Class" Code Lens.
 
 - As a result, a Builder class is generated and replaces the original class in the source code.
 
 <img src="images/builder_02.png" width="200">
 
-3. 🎁 A Builder class is generated under the jfxbuilder directory.
+### 3. 🎁 A Builder class is generated under the jfxbuilder directory.
 
 - The Builder class is named by appending the suffix "-Builder" to the original class name.
 
 <img src="images/builder_03.png" width="200">
 
-4. ⚙️ The Builder class has the same setter methods as the original class, but the "set-" prefix is omitted.
+### 4. ⚙️ The Builder class has the same setter methods as the original class, but the "set-" prefix is omitted.
 
 - In the example below, the Builder class for the Button class is ButtonBuilder, and instead of the setMaxSize method, it has a maxSize method. 
 
@@ -76,6 +76,7 @@ Generates a builder class for a classe in javafx.scene.* packages.
 <img src="images/builder_04.png" width="300">   
 
 
+# Miscellaneous
 
 ## Requirements
 

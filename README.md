@@ -2,6 +2,9 @@
 
 This VSCode extension provides support for FXML controllers in JavaFX projects.
 
+- Detection and correction of fx:id errors.
+- Builder class generator for javafx.scene.* classes.
+
 ## Features
 
 ### (1) 🔔 Detection and correction of fx:id errors.
@@ -41,7 +44,7 @@ Result:
 
 <img src="images/initialize_result.png" width="400">
 
-### (3) 🚧 Builder generator
+### (3) 🚧 Builder class generator
 
 Generates a builder class for a classe in javafx.scene.* packages.
 

@@ -32,6 +32,8 @@ allowing you to create complex instances more compactly.
 
 - The return type of the maxSize method is ButtonBuilder.
 
+- To create an instance of the original class, call build() at the end of the method chain.
+
 <img src="images/builder_04.png" width="400">   
 
 

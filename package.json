@@ -1,13 +1,13 @@
 {
-  "name": "javafx-controller-support",
-  "displayName": "JavaFX Controller Support",
+  "name": "javafx-builder-class-generator",
+  "displayName": "JavaFX Builder Class Generator",
   "publisher": "sosuisha",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sosuisen/javafx-controller-support"
+    "url": "https://github.com/sosuisen/javafx-builder-class-generator"
   },
   "icon": "images/icon.png",
-  "version": "1.1.1",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.96.0"
   },
@@ -15,28 +15,13 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:java",
-    "onLanguage:fxml"
+    "onLanguage:java"
   ],
   "main": "./out/extension.js",
   "extensionDependencies": [
     "redhat.java"
   ],
   "contributes": {
-    "commands": [
-      {
-        "command": "javafx-controller-support.addAllMissingFxIds",
-        "title": "JavaFX Controller: Add All Missing @FXML Fields"
-      },
-      {
-        "command": "javafx-controller-support.addInitializeMethod",
-        "title": "JavaFX Controller: Add initialize()"
-      },
-      {
-        "command": "javafx-controller-support.generateBuilderClass",
-        "title": "JavaFX Controller: Generate Builder Class"
-      }
-    ],
     "languages": [
       {
         "id": "java",
@@ -47,23 +32,6 @@
           "Java",
           "java"
         ]
-      },
-      {
-        "id": "fxml",
-        "extensions": [
-          ".fxml"
-        ],
-        "aliases": [
-          "FXML",
-          "fxml"
-        ]
-      }
-    ],
-    "codeActions": [
-      {
-        "language": "java",
-        "kind": "quickfix",
-        "title": "Add Missing @FXML Fields"
       }
     ]
   },

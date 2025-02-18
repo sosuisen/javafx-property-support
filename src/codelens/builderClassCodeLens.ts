@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import { findMainClass } from '../util';
+
 import path from 'path';
 import * as fs from 'fs';
+import { findMainClass } from '../util';
 
 export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
     private _onDidChangeCodeLenses: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
@@ -74,7 +75,7 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
 
                 codeLenses.push(new vscode.CodeLens(range, {
                     title: 'Generate Builder Class',
-                    command: 'javafx-controller-support.generateBuilderClass'
+                    command: 'javafx-builder-class-generator.generateBuilderClass'
                 }));
             } catch (e) {
                 console.error(e);

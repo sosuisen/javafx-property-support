@@ -11,19 +11,19 @@ You can generate Builder classes from the classes included in the javafx.scene.*
 - The class name must be a canonical name or resolved through an import.
 - Cannot generate builder class if a class has no setXXX methods.
 
-<img src="images/builder_01.png" width="200">
+<img src="images/builder_01.png" width="300">
 
 ## 2. 🔧 Press "Generate Builder Class" Code Lens.
 
 - As a result, a Builder class is generated and replaces the original class on the cursor position.
 
-<img src="images/builder_02.png" width="200">
+<img src="images/builder_02.png" width="320">
 
 ## 3. 🎁 A Builder class is generated under the jfxbuilder directory.
 
 - The Builder class is named by appending the postfix "-Builder" to the original class name.
 
-<img src="images/builder_03.png" width="200">
+<img src="images/builder_03.png" width="300">
 
 ## 4. ⚙️ The Builder class has the same setter methods as the original class, but the "set-" prefix is omitted.
 
@@ -31,7 +31,7 @@ You can generate Builder classes from the classes included in the javafx.scene.*
 
 - The return type of the maxSize method is ButtonBuilder.
 
-<img src="images/builder_04.png" width="300">   
+<img src="images/builder_04.png" width="400">   
 
 
 # Miscellaneous

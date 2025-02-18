@@ -51,6 +51,8 @@ This extension does not contribute any settings.
 
 ## Issues
 
+This plugin will not work unless the "Language Support for Java™ by Red Hat" extension is activated. If you encounter any issues, first ensure that this Language Support extension has been successfully activated.
+
 https://github.com/sosuisen/javafx-builder-class-generator/issues
 
 ## Release Notes

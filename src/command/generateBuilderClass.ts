@@ -28,6 +28,7 @@ interface MethodInfo {
     methodName: string;
     className: string;
     dataTypeList: string[];
+    returnType?: string;
 }
 
 let cancelTokenSource: vscode.CancellationTokenSource | undefined;
@@ -48,7 +49,7 @@ export async function generateBuilderClass() {
     const cursorLine = cursorPosition.line;
     const line = editor.document.lineAt(cursorLine).text;
 
-    const match = line.match(/^(\s*)(.*)new\s+([\w.]+)\s*\((.*)\)/);
+    const match = line.match(/^(\s*)(.*)new\s+([\w.]+)\s*\((.*?)\)/);
     if (!match) {
         return;
     }
@@ -130,11 +131,12 @@ export async function generateBuilderClass() {
                 classSymbol.children
                     .filter(symbol =>
                         symbol.kind === vscode.SymbolKind.Method &&
-                        symbol.name.startsWith('set')
+                        (symbol.name.startsWith('set') || symbol.name.startsWith('getChildren'))
                     )
                     .forEach(symbol => {
+                        const returnType = symbol.detail.replace(/ : /g, '').trim();
                         // Separate method name and parameters
-                        const methodMatch = symbol.name.match(/^(set\w+)\((.*)\)/);
+                        const methodMatch = symbol.name.match(/^(\w+)\((.*)\)/);
                         if (methodMatch) {
                             const [, methodName, params] = methodMatch;
                             const dataTypeList = processGenericTypes(params);
@@ -153,7 +155,8 @@ export async function generateBuilderClass() {
                                 methodMap.set(key, {
                                     methodName,
                                     className: currentItem.name,
-                                    dataTypeList
+                                    dataTypeList,
+                                    returnType
                                 });
                             }
                         }
@@ -176,7 +179,7 @@ export async function generateBuilderClass() {
                                 constructorMap.set(key, {
                                     methodName,
                                     className: currentItem.name,
-                                    dataTypeList
+                                    dataTypeList,
                                 });
                             }
                         }
@@ -231,8 +234,6 @@ export async function generateBuilderClass() {
         var indent = ' '.repeat(prevText.length + 4);
         edit.replace(editor.document.uri, range, `${prevSpaces}${prevText}${builderClassName}.create(${originalArgs})\n${prevSpaces}${indent}.build()`);
         await vscode.workspace.applyEdit(edit);
-
-
         await createBuilderClassFile(methodInfoList, constructorInfoList, mainClass, targetClassNameOnly);
     } else {
         console.log('Main class not found.');
@@ -306,12 +307,23 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], constructorI
 
                 const paramList = paramPairs.join(', ');
 
-                // Add generic type parameter if <T> is in parameter list
-                const hasGenericType = paramList.includes('<T>');
-                const methodSignature = hasGenericType ?
-                    `    public <T extends Event> ${targetClassName}Builder ${builderMethodName}(${paramList})` :
-                    `    public ${targetClassName}Builder ${builderMethodName}(${paramList})`;
-                return methodSignature + ` { in.${info.methodName}(${paramValues}); return this; }`;
+                if (builderMethodName === 'children') {
+                    if (info.returnType) {
+                        const genericTypeMatch = info.returnType.match(/ObservableList<(.+?)>/);
+                        if (genericTypeMatch) {
+                            const genericType = genericTypeMatch[1];
+                            return `    public ${targetClassName}Builder children(${genericType}... elements) { in.getChildren().setAll(elements); return this; }`;
+                        }
+                    }
+                }
+                else {
+                    // Add generic type parameter if <T> is in parameter list
+                    const hasGenericType = paramList.includes('<T>');
+                    const methodSignature = hasGenericType ?
+                        `    public <T extends Event> ${targetClassName}Builder ${builderMethodName}(${paramList})` :
+                        `    public ${targetClassName}Builder ${builderMethodName}(${paramList})`;
+                    return methodSignature + ` { in.${info.methodName}(${paramValues}); return this; }`;
+                }
             })
             .join('\n\n');
 
@@ -415,6 +427,9 @@ ${builderMethods}
                         lines[lineNumber] = '';
                     }
                     if (diagnostic.code === '268435844') { // never used
+                        lines[lineNumber] = '';
+                    }
+                    if (diagnostic.code === '603979893') { // static method
                         lines[lineNumber] = '';
                     }
                 });

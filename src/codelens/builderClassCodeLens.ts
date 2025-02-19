@@ -50,7 +50,7 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
 
                 // Show CodeLens only if new of javafx.scene.* Class is found
                 if (!typeDefinitions || typeDefinitions.length === 0 ||
-                    !typeDefinitions[0].uri.path.includes('javafx.scene.')
+                    !typeDefinitions[0].uri.path.includes('javafx.scene')
                 ) {
                     return codeLenses;
                 }

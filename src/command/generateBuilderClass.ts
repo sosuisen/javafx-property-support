@@ -199,15 +199,15 @@ export async function generateBuilderClass() {
                 }
             }
 
-            // Replace 'new TargetClassName' with 'new TargetClassNameBuilder'
+            // Replace 'new TargetClassName' with 'TargetClassNameBuilder.create().build()'
             const range = new vscode.Range(
                 cursorPosition.line,
-                startPos + newLength,
+                startPos,
                 cursorPosition.line,
                 startPos + newLength + targetClassFullName.length
             );
             var indent = ' '.repeat(startPos + 8);
-            edit.replace(editor.document.uri, range, `${builderClassName}()\n${indent}.build`);
+            edit.replace(editor.document.uri, range, `${builderClassName}.create()\n${indent}.build`);
             await vscode.workspace.applyEdit(edit);
         }
 
@@ -297,13 +297,20 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], mainClass: {
         let builderCode = `package ${mainClass.packageName}.jfxbuilder;
 
 import javafx.scene.*;
-import javafx.scene.layout.*;
-import javafx.scene.effect.*;
+import javafx.scene.canvas.*;
+import javafx.scene.chart.*;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.*;
+import javafx.scene.effect.*;
+import javafx.scene.image.*;
 import javafx.scene.input.*;
-import javafx.scene.text.*;
-import javafx.scene.shape.*;
+import javafx.scene.layout.*;
+import javafx.scene.media.*;
 import javafx.scene.paint.*;
+import javafx.scene.shape.*;
+import javafx.scene.text.*;
+import javafx.scene.transform.*;
+
 import javafx.css.*;
 import javafx.event.*;
 import javafx.geometry.*;
@@ -311,13 +318,12 @@ import javafx.collections.*;
 import java.util.*;
 
 public class ${targetClassName}Builder {
+    public static ${targetClassName}Builder create() { return new ${targetClassName}Builder(); }  
     private ${targetClassName} in;
-
-    public ${targetClassName}Builder() { in = new ${targetClassName}(); }
+    private ${targetClassName}Builder() { in = new ${targetClassName}(); }
+    public ${targetClassName} build() { return in; }
 
 ${builderMethods}
-
-    public ${targetClassName} build() { return in; }
 }
 `;
 

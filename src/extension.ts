@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { BuilderClassCodeLensProvider } from './codelens/builderClassCodeLens';
 import { generateBuilderClass } from './command/generateBuilderClass';
 import path from 'path';
-import { checkModule, deleteModule } from './util';
-
+import { checkModule, constructorMap, deleteModule } from './util';
+import fs from 'fs';
 // This method is called when the extension is activated
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('JavaFX Builder Class Generator extension is activated');
@@ -12,6 +12,40 @@ export async function activate(context: vscode.ExtensionContext) {
 	if (!workspaceFolders) {
 		console.error('No workspace folder is open.');
 		return;
+	}
+
+	const txtResourceUri = vscode.Uri.joinPath(context.extensionUri, 'resources', 'constructor.txt');
+	try {
+		const data = await vscode.workspace.fs.readFile(txtResourceUri);
+		const content = new TextDecoder().decode(data);
+		content.split('\n').forEach(line => {
+			if (line.includes(':')) {
+				let [className, args] = line.split(':');
+				className = className.trim();
+				if (className) {
+					args = args.trim();
+					args.split(',').forEach(arg => {
+						arg = arg.trim();
+						let [type, param] = arg.split(' ');
+						type = type.trim();
+						param = param.trim();
+						if (type && param) {
+							if (!constructorMap[className]) {
+								constructorMap[className] = {};
+							}
+							if (!constructorMap[className][args]) {
+								constructorMap[className][args] = [{ type, param }];
+							}
+							else {
+								constructorMap[className][args].push({ type, param });
+							}
+						}
+					});
+				}
+			}
+		});
+	} catch (error) {
+		console.error('Error reading constructor.txt:', error);
 	}
 
 	async function checkAllJavaFiles() {

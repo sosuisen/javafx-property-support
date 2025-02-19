@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { TextDocumentIdentifier, Position, TextDocumentPositionParams } from 'vscode-languageclient';
 import { Range, SymbolKind } from "vscode-languageclient";
 import path from 'path';
-import { findMainClass, moduleMaps } from '../util';
+import { findMainClass, moduleMaps, constructorMap } from '../util';
 
 enum TypeHierarchyDirection {
     children,
@@ -285,6 +285,48 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], constructorI
     const builderFilePath = `${builderDirPath}/${targetClassName}Builder.java`;
 
     try {
+        const constructorInfo = constructorMap[targetClassName];
+        let extraBuilderMethod = "";
+        const fieldMap: { [key: string]: boolean } = {};
+        const methodMap: { [key: string]: boolean } = {};
+
+        const initialValue: { [key: string]: string } = {
+            //            boolean: "false",
+            byte: "-1",
+            short: "-1",
+            int: "-1",
+            long: "-1L",
+            float: "-1.0f",
+            double: "-1.0d",
+            char: "\\u0000"
+        };
+
+        if (constructorInfo) {
+            for (const infoArray of Object.values(constructorInfo)) {
+                for (const info of infoArray) {
+                    if (!fieldMap[info.type + info.param]) {
+                        fieldMap[info.type + info.param] = true;
+                        const methodName = 'set' + info.param.charAt(0).toUpperCase() + info.param.slice(1);
+                        methodMap[info.param + info.type] = true;
+                        if (initialValue[info.type]) {
+                            extraBuilderMethod += `    private ${info.type} ${info.param} = ${initialValue[info.type]};\n`;
+                        }
+                        else {
+                            extraBuilderMethod += `    private ${info.type} ${info.param};\n`;
+                        }
+                        extraBuilderMethod += `    public ${targetClassName}Builder ${info.param}(${info.type} ${info.param}) { 
+                            if(in == null) { this.${info.param} = ${info.param}; }
+                            else { in.${methodName}(${info.param}); }
+                            return this; }\n`;
+                    }
+                }
+            }
+
+            const createMethod = `    public static ${targetClassName}Builder create() { return new ${targetClassName}Builder(); }`;
+            const builderConstructor = `    private ${targetClassName}Builder() {}`;
+            extraBuilderMethod += createMethod + '\n' + builderConstructor;
+        }
+
         // Generate Builder methods
         const builderMethods = methodInfoList
             .map(info => {
@@ -307,6 +349,14 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], constructorI
 
                 const paramList = paramPairs.join(', ');
 
+                // Skip duplicate methods
+                // extraBuilderMethod may have same method
+                // e.g. Scene.fill(Paint fill)
+                const firstParamType = paramList.split(' ')[0];
+                if (methodMap[builderMethodName + firstParamType]) {
+                    return;
+                }
+
                 if (builderMethodName === 'children') {
                     if (info.returnType) {
                         const genericTypeMatch = info.returnType.match(/ObservableList<(.+?)>/);
@@ -327,6 +377,7 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], constructorI
             })
             .join('\n\n');
 
+
         const builderCreateMethods = constructorInfoList
             .map(info => {
                 const paramPairs = info.dataTypeList.map((type, index) => {
@@ -345,10 +396,7 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], constructorI
                 const paramList = paramPairs.join(', ');
 
                 // Add generic type parameter if <T> is in parameter list
-                const hasGenericType = paramList.includes('<T>');
-                const methodSignature = hasGenericType ?
-                    `    public static <T extends Event> ${targetClassName}Builder create(${paramList})` :
-                    `    public static ${targetClassName}Builder create(${paramList})`;
+                const methodSignature = `    public static ${targetClassName}Builder create(${paramList})`;
                 const createMethod = methodSignature + ` { return new ${targetClassName}Builder(${paramValues}); }`;
                 const builderConstructor = `    private ${targetClassName}Builder(${paramList}) { in = new ${targetClassName}(${paramValues}); }`;
                 return createMethod + `\n\n${builderConstructor}`;
@@ -368,6 +416,54 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], constructorI
                 }
             }
         }
+
+        let buildMethod = `    public ${targetClassName} build() { return in; }`;
+        if (constructorInfo) {
+            let constructorCode = "";
+            let firstConstructor = true;
+            for (const infoArray of Object.values(constructorInfo)) {
+                let constructorCondition = "";
+                let constructorParams = "";
+                for (let i = 0; i < infoArray.length; i++) {
+                    const info = infoArray[i];
+                    if (info.type !== 'boolean') {
+                        if (i > 0) {
+                            constructorCondition += " && ";
+                        }
+
+                        if (initialValue[info.type]) {
+                            constructorCondition += `${info.param} != ${initialValue[info.type]}`;
+                        }
+                        else {
+                            constructorCondition += `${info.param} != null`;
+                        }
+                    }
+                    constructorParams += `${info.param}`;
+                    if (i < infoArray.length - 1) {
+                        constructorParams += ", ";
+                    }
+                }
+                if (firstConstructor) {
+                    constructorCode += `if(${constructorCondition}) {
+                        in = new ${targetClassName}(${constructorParams});
+                    }`;
+                    firstConstructor = false;
+                }
+                else {
+                    constructorCode += `else if(${constructorCondition}) {
+                        in = new ${targetClassName}(${constructorParams});
+                    }`;
+                }
+            }
+            buildMethod = `    public ${targetClassName} build() { 
+                if(in == null) {
+                    ${constructorCode}
+                }
+                return in;
+            }`;
+        }
+
+
 
         // Generate Builder class code
         let builderCode = `package ${mainClass.packageName}.jfxbuilder;
@@ -399,8 +495,9 @@ import java.util.*;
 
 public class ${targetClassName}Builder {
     private ${targetClassName} in;
+${extraBuilderMethod}
 ${builderCreateMethods}
-    public ${targetClassName} build() { return in; }
+${buildMethod}
 
 ${builderMethods}
 }
@@ -424,6 +521,10 @@ ${builderMethods}
                 const lines = builderCode.split('\n');
                 diagnostics.forEach(diagnostic => {
                     const lineNumber = diagnostic.range.start.line;
+                    // extraBuilderMethod may have undefined method
+                    if (diagnostic.code === '67108964') { // method not found
+                        lines[lineNumber] = '';
+                    }
                     if (diagnostic.code === '67108965') { // method not visible
                         lines[lineNumber] = '';
                     }

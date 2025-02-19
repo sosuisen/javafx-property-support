@@ -40,10 +40,6 @@ allowing you to create complex instances more compactly.
 
 # Example
 
-```java
-public VBoxBuilder children(Node... elements) { in.getChildren().setAll(elements); return this; }
-```
-
 <img src="images/example_01.png" width="500">
 
 <img src="images/example_02.png" width="200">

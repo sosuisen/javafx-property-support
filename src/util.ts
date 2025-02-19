@@ -31,3 +31,34 @@ export async function findMainClass(uri: vscode.Uri): Promise<{ packageName: str
 
     return null;
 }
+
+export const moduleMaps: { [key: string]: string[] } = {};
+export function checkModule(document: vscode.TextDocument) {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    if (!workspaceFolder) {
+        return;
+    }
+
+    const content = document.getText();
+    content.split('\n').forEach(line => {
+        const modulePattern = /requires\s+([\w.]+);/;
+        const moduleMatch = line.match(modulePattern);
+        if (moduleMatch) {
+            const moduleName = moduleMatch[1].trim();
+            if (!moduleMaps[workspaceFolder.uri.fsPath]) {
+                moduleMaps[workspaceFolder.uri.fsPath] = [];
+            }
+            moduleMaps[workspaceFolder.uri.fsPath].push(moduleName);
+        }
+    });
+}
+
+export function deleteModule(document: vscode.TextDocument) {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    if (!workspaceFolder) {
+        return;
+    }
+
+    delete moduleMaps[workspaceFolder.uri.fsPath];
+}
+

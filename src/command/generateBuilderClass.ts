@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { TextDocumentIdentifier, Position, TextDocumentPositionParams } from 'vscode-languageclient';
 import { Range, SymbolKind } from "vscode-languageclient";
 import path from 'path';
-import { findMainClass } from '../util';
+import { findMainClass, moduleMaps } from '../util';
 
 enum TypeHierarchyDirection {
     children,
@@ -48,15 +48,20 @@ export async function generateBuilderClass() {
     const cursorLine = cursorPosition.line;
     const line = editor.document.lineAt(cursorLine).text;
 
-    const constructorPattern = /new\s+([\w.]+)\s*\(/;
-    const match = line.match(constructorPattern);
+    const match = line.match(/^(\s*)(.*)new\s+([\w.]+)\s*\((.*)\)/);
     if (!match) {
         return;
     }
-    const targetClassFullName = match[1];
-    const classNamePattern = /new\s+[\w.]+?\.(\w+?)\s*\(/;
-    const classMatch = line.match(classNamePattern);
-    const targetClassNameOnly = classMatch ? classMatch[1] : targetClassFullName;
+    const startPos = match.index!;
+    const matchLength = match[0].length;
+    const prevSpaces = match[1];
+    const prevText = match[2];
+    const targetClassFullName = match[3];
+    const originalArgs = match[4];
+
+    const classNameMatch = targetClassFullName.match(/[\w.]+?\.(\w+?)/);
+    const targetClassNameOnly = classNameMatch ? classNameMatch[1] : targetClassFullName;
+
     const classStartAt = line.indexOf(targetClassNameOnly + "(");
     const classPosition = new vscode.Position(cursorPosition.line, classStartAt + 1);
 
@@ -95,6 +100,7 @@ export async function generateBuilderClass() {
     const processedClasses = new Set<string>();
     const classQueue: LSPTypeHierarchyItem[] = [lspItem];
     const methodMap = new Map<string, MethodInfo>();
+    const constructorMap = new Map<string, MethodInfo>();
 
     // Process class hierarchy using queue
     while (classQueue.length > 0) {
@@ -133,9 +139,7 @@ export async function generateBuilderClass() {
                             const [, methodName, params] = methodMatch;
                             const dataTypeList = processGenericTypes(params);
 
-                            // Use lowercase name without 'set' as key
-                            const key = methodName.substring(3).charAt(0).toLowerCase() +
-                                methodName.substring(4);
+                            const key = symbol.name;
 
                             // Add only methods that haven't been registered yet (ignore parent class methods)
                             if (!methodMap.has(key)) {
@@ -154,6 +158,29 @@ export async function generateBuilderClass() {
                             }
                         }
                     });
+
+                classSymbol.children.filter(symbol =>
+                    symbol.kind === vscode.SymbolKind.Constructor
+                    && symbol.name.startsWith(targetClassNameOnly + "(")
+                )
+                    .forEach(symbol => {
+                        // Separate method name and parameters
+                        const constructorMatch = symbol.name.match(/^(\w+?)\((.*)\)/);
+                        if (constructorMatch) {
+                            const [, methodName, params] = constructorMatch;
+                            const dataTypeList = processGenericTypes(params);
+                            const key = symbol.name;
+
+                            // Add only methods that haven't been registered yet (ignore parent class methods)
+                            if (!constructorMap.has(key)) {
+                                constructorMap.set(key, {
+                                    methodName,
+                                    className: currentItem.name,
+                                    dataTypeList
+                                });
+                            }
+                        }
+                    });
             }
         }
 
@@ -165,53 +192,48 @@ export async function generateBuilderClass() {
 
     // Convert Map to array
     const methodInfoList = Array.from(methodMap.values());
-
     if (methodInfoList.length === 0) {
         vscode.window.showInformationMessage('Cannot generate builder class because no setter methods found.');
         return;
     }
 
+    const constructorInfoList = Array.from(constructorMap.values());
+
     const mainClass = await findMainClass(document.uri);
     if (mainClass) {
-        const line = editor.document.lineAt(cursorPosition.line).text;
-        const newPattern = new RegExp(`(new\\s+)${targetClassFullName}\\s*\\(`);
-        const match = line.match(newPattern);
-        if (match) {
-            const startPos = match.index!;
-            const newLength = match[1].length;
-            const edit = new vscode.WorkspaceEdit();
+        const edit = new vscode.WorkspaceEdit();
 
-            const builderClassName = `${targetClassNameOnly}Builder`;
-            const builderClassFullName = `${mainClass.packageName}.jfxbuilder.${builderClassName}`;
-            // Check existing import statements
-            const documentText = editor.document.getText();
-            const importPattern = new RegExp(`^import\\s+${builderClassFullName};`, 'm');
+        const builderClassName = `${targetClassNameOnly}Builder`;
+        const builderClassFullName = `${mainClass.packageName}.jfxbuilder.${builderClassName}`;
+        // Check existing import statements
+        const documentText = editor.document.getText();
+        const importPattern = new RegExp(`^import\\s+${builderClassFullName};`, 'm');
 
-            if (!importPattern.test(documentText)) {
-                // Find package statement
-                const packageMatch = documentText.match(/^package\s+[^;]+;/m);
+        if (!importPattern.test(documentText)) {
+            // Find package statement
+            const packageMatch = documentText.match(/^package\s+[^;]+;/m);
 
-                if (packageMatch) {
-                    const packageEndPos = editor.document.positionAt(packageMatch.index! + packageMatch[0].length);
-                    // Add import statement after package statement
-                    edit.insert(editor.document.uri, new vscode.Position(packageEndPos.line + 1, 0),
-                        `\nimport ${builderClassFullName};\n`);
-                }
+            if (packageMatch) {
+                const packageEndPos = editor.document.positionAt(packageMatch.index! + packageMatch[0].length);
+                // Add import statement after package statement
+                edit.insert(editor.document.uri, new vscode.Position(packageEndPos.line + 1, 0),
+                    `\nimport ${builderClassFullName};\n`);
             }
-
-            // Replace 'new TargetClassName' with 'TargetClassNameBuilder.create().build()'
-            const range = new vscode.Range(
-                cursorPosition.line,
-                startPos,
-                cursorPosition.line,
-                startPos + newLength + targetClassFullName.length
-            );
-            var indent = ' '.repeat(startPos + 8);
-            edit.replace(editor.document.uri, range, `${builderClassName}.create()\n${indent}.build`);
-            await vscode.workspace.applyEdit(edit);
         }
 
-        await createBuilderClassFile(methodInfoList, mainClass, targetClassNameOnly);
+        // Replace 'new TargetClassName' with 'TargetClassNameBuilder.create().build()'
+        const range = new vscode.Range(
+            cursorPosition.line,
+            startPos,
+            cursorPosition.line,
+            startPos + matchLength
+        );
+        var indent = ' '.repeat(prevText.length + 4);
+        edit.replace(editor.document.uri, range, `${prevSpaces}${prevText}${builderClassName}.create(${originalArgs})\n${prevSpaces}${indent}.build()`);
+        await vscode.workspace.applyEdit(edit);
+
+
+        await createBuilderClassFile(methodInfoList, constructorInfoList, mainClass, targetClassNameOnly);
     } else {
         console.log('Main class not found.');
     }
@@ -253,7 +275,7 @@ function processGenericTypes(text: string): string[] {
     return result;
 }
 
-async function createBuilderClassFile(methodInfoList: MethodInfo[], mainClass: { packageName: string, filePath: string }, targetClassName: string) {
+async function createBuilderClassFile(methodInfoList: MethodInfo[], constructorInfoList: MethodInfo[], mainClass: { packageName: string, filePath: string }, targetClassName: string) {
     const mainClassPath = mainClass.filePath;
     const mainClassDir = mainClassPath.substring(0, mainClassPath.lastIndexOf(path.sep));
 
@@ -275,7 +297,7 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], mainClass: {
                     }
                     return info.dataTypeList.length === 1 ? `${type} value` : `${type} value${index + 1}`;
                 });
-                const paramNames = paramPairs.map((pair, index) => {
+                const paramValues = paramPairs.map((pair, index) => {
                     if (info.methodName === 'setMaxSize' || info.methodName === 'setMinSize' || info.methodName === 'setPrefSize') {
                         return index === 0 ? 'width' : 'height';
                     }
@@ -289,9 +311,51 @@ async function createBuilderClassFile(methodInfoList: MethodInfo[], mainClass: {
                 const methodSignature = hasGenericType ?
                     `    public <T extends Event> ${targetClassName}Builder ${builderMethodName}(${paramList})` :
                     `    public ${targetClassName}Builder ${builderMethodName}(${paramList})`;
-                return methodSignature + ` { in.${info.methodName}(${paramNames}); return this; }`;
+                return methodSignature + ` { in.${info.methodName}(${paramValues}); return this; }`;
             })
             .join('\n\n');
+
+        const builderCreateMethods = constructorInfoList
+            .map(info => {
+                const paramPairs = info.dataTypeList.map((type, index) => {
+                    if (info.methodName === 'setMaxSize' || info.methodName === 'setMinSize' || info.methodName === 'setPrefSize') {
+                        return index === 0 ? `${type} width` : `${type} height`;
+                    }
+                    return info.dataTypeList.length === 1 ? `${type} value` : `${type} value${index + 1}`;
+                });
+                const paramValues = paramPairs.map((pair, index) => {
+                    if (info.methodName === 'setMaxSize' || info.methodName === 'setMinSize' || info.methodName === 'setPrefSize') {
+                        return index === 0 ? 'width' : 'height';
+                    }
+                    return info.dataTypeList.length === 1 ? 'value' : `value${index + 1}`;
+                }).join(', ');
+
+                const paramList = paramPairs.join(', ');
+
+                // Add generic type parameter if <T> is in parameter list
+                const hasGenericType = paramList.includes('<T>');
+                const methodSignature = hasGenericType ?
+                    `    public static <T extends Event> ${targetClassName}Builder create(${paramList})` :
+                    `    public static ${targetClassName}Builder create(${paramList})`;
+                const createMethod = methodSignature + ` { return new ${targetClassName}Builder(${paramValues}); }`;
+                const builderConstructor = `    private ${targetClassName}Builder(${paramList}) { in = new ${targetClassName}(${paramValues}); }`;
+                return createMethod + `\n\n${builderConstructor}`;
+            })
+            .join('\n\n');
+
+        let extraImport = "";
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(mainClass.filePath));
+        if (workspaceFolder) {
+            const moduleNames = moduleMaps[workspaceFolder.uri.fsPath];
+            if (moduleNames) {
+                if (moduleNames.includes('javafx.media')) {
+                    extraImport += `import javafx.scene.media.*;`;
+                }
+                if (moduleNames.includes('javafx.web')) {
+                    extraImport += `import javafx.scene.web.*;`;
+                }
+            }
+        }
 
         // Generate Builder class code
         let builderCode = `package ${mainClass.packageName}.jfxbuilder;
@@ -301,26 +365,28 @@ import javafx.scene.canvas.*;
 import javafx.scene.chart.*;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.*;
+import javafx.scene.control.skin.*;
 import javafx.scene.effect.*;
 import javafx.scene.image.*;
 import javafx.scene.input.*;
 import javafx.scene.layout.*;
-import javafx.scene.media.*;
 import javafx.scene.paint.*;
 import javafx.scene.shape.*;
 import javafx.scene.text.*;
 import javafx.scene.transform.*;
 
+${extraImport}
+
 import javafx.css.*;
 import javafx.event.*;
 import javafx.geometry.*;
 import javafx.collections.*;
+import javafx.util.*;
 import java.util.*;
 
 public class ${targetClassName}Builder {
-    public static ${targetClassName}Builder create() { return new ${targetClassName}Builder(); }  
     private ${targetClassName} in;
-    private ${targetClassName}Builder() { in = new ${targetClassName}(); }
+    ${builderCreateMethods}
     public ${targetClassName} build() { return in; }
 
 ${builderMethods}

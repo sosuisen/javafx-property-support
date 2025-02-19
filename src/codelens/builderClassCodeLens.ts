@@ -16,6 +16,7 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
     }
 
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
+
         const codeLenses: vscode.CodeLens[] = [];
         const editor = vscode.window.activeTextEditor;
         if (!editor || editor.document !== document) {

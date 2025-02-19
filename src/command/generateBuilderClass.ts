@@ -499,6 +499,11 @@ ${extraBuilderMethod}
 ${builderCreateMethods}
 ${buildMethod}
 
+    public ${targetClassName}Builder apply(java.util.function.Consumer<${targetClassName}> func) {
+        func.accept((${targetClassName}) in);
+        return this;
+    }
+
 ${builderMethods}
 }
 `;

@@ -145,10 +145,10 @@ export async function generateBuilderClass() {
 
                             // Add only methods that haven't been registered yet (ignore parent class methods)
                             if (!methodMap.has(key)) {
-                                // Handle deprecated methods
-                                const deprecated = ['LayoutFlags', 'ParentTraversalEngine'];
+                                // Handle inner/deprecated methods
+                                const inner_or_deprecated = ['LayoutFlags', 'ParentTraversalEngine', 'DirtyBits'];
                                 // Skip if data type contains deprecated types
-                                if (dataTypeList.some(type => deprecated.some(d => type.includes(d)))) {
+                                if (dataTypeList.some(type => inner_or_deprecated.some(d => type.includes(d)))) {
                                     return;
                                 }
 
@@ -394,11 +394,12 @@ import javafx.event.*;
 import javafx.geometry.*;
 import javafx.collections.*;
 import javafx.util.*;
+import javafx.stage.*;
 import java.util.*;
 
 public class ${targetClassName}Builder {
     private ${targetClassName} in;
-    ${builderCreateMethods}
+${builderCreateMethods}
     public ${targetClassName} build() { return in; }
 
 ${builderMethods}
@@ -423,7 +424,14 @@ ${builderMethods}
                 const lines = builderCode.split('\n');
                 diagnostics.forEach(diagnostic => {
                     const lineNumber = diagnostic.range.start.line;
-                    if (diagnostic.code === '67108965') { // not visible
+                    if (diagnostic.code === '67108965') { // method not visible
+                        lines[lineNumber] = '';
+                    }
+                    if (diagnostic.code === '134217859') { // constructor not visible
+                        lines[lineNumber] = '';
+                    }
+                    if (diagnostic.code === '134217858') { // constructor not defined
+                        // Constructor not defined when remove invisible constructor
                         lines[lineNumber] = '';
                     }
                     if (diagnostic.code === '268435844') { // never used

@@ -62,8 +62,8 @@ You can pass a lambda that takes an instance of the original class as an argumen
 Usage follows the example provided above.
 
 ```java
-public VBoxBuilder apply(java.util.function.Consumer<VBox> func) {
-        func.accept((VBox) in);
+public LabelBuilder apply(java.util.function.Consumer<Label> func) {
+        func.accept((Label) in);
         return this;
     }
 ```

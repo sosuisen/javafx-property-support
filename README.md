@@ -5,6 +5,8 @@ This VSCode extension provides a code generator for creating builder classes in 
 You can generate builder classes for various types included in the `javafx.scene.*` packages, such as `Button` and `VBox`,
 allowing you to create complex instances more compactly.
 
+<img src="images/builder_04.png" width="400">   
+
 # How to Use
 
 ## 1. 🏃‍➡️ Move the cursor over a "new ClassName()" expression.

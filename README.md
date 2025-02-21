@@ -94,6 +94,11 @@ https://github.com/sosuisen/javafx-builder-class-generator/issues
 
 ## Release Notes
 
+### 1.2.0
+
+- Added hint dots(...) under the ClassName when a builder class can be generated.
+- Removed code lens; use code action instead.
+
 ### 1.1.0
 
 - Added `apply` method to the builder class.

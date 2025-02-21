@@ -1,30 +1,20 @@
 import * as vscode from 'vscode';
-
-import path from 'path';
-import * as fs from 'fs';
 import { findMainClass } from '../util';
+import * as path from 'path';
+import * as fs from 'fs';
 
-export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
-    private _onDidChangeCodeLenses: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
-    public readonly onDidChangeCodeLenses: vscode.Event<void> = this._onDidChangeCodeLenses.event;
+const diagnosticCollection = vscode.languages.createDiagnosticCollection('scene-class-diagnostic');
 
-    constructor() {
-        // Update CodeLens when cursor position changes
-        vscode.window.onDidChangeTextEditorSelection(() => {
-            this._onDidChangeCodeLenses.fire();
-        });
+export async function diagSceneClass(document: vscode.TextDocument) {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document !== document) {
+        return;
     }
+    diagnosticCollection.delete(document.uri);
+    const diagnostics: vscode.Diagnostic[] = [];
 
-    async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
-        const codeLenses: vscode.CodeLens[] = [];
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.document !== document) {
-            return codeLenses;
-        }
-
-        const cursorPosition = editor.selection.active;
-        const cursorLine = cursorPosition.line;
-        const line = editor.document.lineAt(cursorLine).text;
+    for (let i = 0; i < document.lineCount; i++) {
+        const line = document.lineAt(i).text;
 
         const constructorPattern = /new\s+([\w.]+)\s*\(/;
         const match = line.match(constructorPattern);
@@ -37,7 +27,7 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
             // MyClass
             const targetClassNameOnly = classMatch ? classMatch[1] : targetClassFullName;
             const classStartAt = line.indexOf(targetClassNameOnly + "(");
-            const classPosition = new vscode.Position(cursorPosition.line, classStartAt + 1);
+            const classPosition = new vscode.Position(i, classStartAt + 1);
 
             // Get type definitions
             try {
@@ -51,36 +41,38 @@ export class BuilderClassCodeLensProvider implements vscode.CodeLensProvider {
                 if (!typeDefinitions || typeDefinitions.length === 0 ||
                     !typeDefinitions[0].uri.path.includes('javafx.scene')
                 ) {
-                    return codeLenses;
+                    continue;
                 }
 
                 const mainClass = await findMainClass(document.uri);
                 if (!mainClass) {
-                    return codeLenses;
+                    continue;
                 }
                 const mainClassPath = mainClass.filePath;
                 const mainClassDir = mainClassPath.substring(0, mainClassPath.lastIndexOf(path.sep));
                 const builderDirPath = `${mainClassDir}/jfxbuilder`;
                 const builderFilePath = `${builderDirPath}/${targetClassNameOnly}Builder.java`;
                 if (fs.existsSync(builderFilePath)) {
-                    return codeLenses;
+                    continue;
                 }
 
                 const range = new vscode.Range(
-                    cursorLine,
+                    i,
                     classStartAt,
-                    cursorLine,
+                    i,
                     classStartAt + targetClassNameOnly.length
                 );
 
-                codeLenses.push(new vscode.CodeLens(range, {
-                    title: 'Generate Builder Class',
-                    command: 'javafx-builder-class-generator.generateBuilderClass'
-                }));
+
+
+                const message = 'Can generate builder class';
+                const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Hint);
+                diagnostics.push(diagnostic);
+
             } catch (e) {
                 console.error(e);
             }
         }
-        return codeLenses;
+        diagnosticCollection.set(document.uri, diagnostics);
     }
 }

@@ -12,15 +12,19 @@ allowing you to create complex instances more compactly.
 ## 1. 🏃‍➡️ Move the cursor over a "new ClassName()" expression.
 - The class must be from the `javafx.scene.*` packages.
 - The class name must be a canonical name or resolved through an import.
-- A builder class cannot be generated if the class has no "set-" methods.
-- Ensure that the expression is grammatically correct, including the use of a semicolon at the end of the statement. If you perform this action, the "Generate Builder Class" Code Lens will appear.
+- Hint dots(...) will appear under the ClassName when you can generate a builder class.
+
+<img src="images/hint.png" width="300">
 
 
-<img src="images/builder_01.png" width="300">
+## 2. 🔧 Open the code action and select "Generate Builder Class".
 
-## 2. 🔧 Press "Generate Builder Class" Code Lens.
+- You can open the code action by pressing 'Ctrl+.' (or 'Cmd+.' on Mac).
 
-- A builder class is generated and replaces the original class at the cursor position.
+<img src="images/codeaction.png" width="400">
+
+- A builder class will be generated and will replace the original class at the cursor position.
+- A builder class cannot be generated if the class does not have any "set-" methods.
 
 <img src="images/builder_02.png" width="320">
 

@@ -142,12 +142,13 @@ public void setDataMap(ObservableMap<String, String> dataMap) {
 ```
 ```java
 private final ReadOnlyMapWrapper<String, String> readOnlyDataMap = new ReadOnlyMapWrapper<>(dataMap);
-	// readOnlyDataMap
-	public ReadOnlyMapProperty<String, String> readOnlyDataMapProperty() {
-		return readOnlyDataMap.getReadOnlyProperty();
-	}
 
-	public ObservableMap<String, String> getReadOnlyDataMap() {
-		return readOnlyDataMap.get();
-	}
+// readOnlyDataMap
+public ReadOnlyMapProperty<String, String> readOnlyDataMapProperty() {
+	return readOnlyDataMap.getReadOnlyProperty();
+}
+
+public ObservableMap<String, String> getReadOnlyDataMap() {
+	return readOnlyDataMap.get();
+}
 ```

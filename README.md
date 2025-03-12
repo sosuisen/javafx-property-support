@@ -22,13 +22,13 @@ This VSCode extension provides a getter and setter generator for JavaFX properti
 
 - A property getter, a general getter, and a general setter are generated.
 - The method name is automatically derived from the private property field name. 
-  - "private StringProperty title" -> "public String getTitle()"
+  - `private StringProperty title` -> `public String getTitle()`
 - However, if the field name ends with a string that starts with "Prop," that portion is ignored.
-  - "private StringProperty nameProp" -> "public String getName()"
-  - "private StringProperty nameProperty" -> "public String getName()"
+  - `private StringProperty nameProp` -> `public String getName()`
+  - `private StringProperty nameProperty` -> `public String getName()`
 - A read-only wrapper does not generate a setter.
-- ObjectProperty<T> is unboxed when possible.
-  - "private ObjectProperty<Integer> priority" -> "public int getPriority()"
+- ObjectProperty&lt;T&gt; is unboxed when possible.
+  - `private ObjectProperty<Integer> priority` -> `public int getPriority()`
 
 # Examples
 

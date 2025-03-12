@@ -1,20 +1,11 @@
 import * as vscode from 'vscode';
-import { BuilderClassCodeLensProvider } from './codelens/builderClassCodeLens';
-import { generateBuilderClass } from './command/generateBuilderClass';
-import path from 'path';
-import { checkModule, constructorMap, deleteModule } from './util';
-import fs from 'fs';
-import { BuilderClassCodeActionProvider } from './codeactions/builderClass';
-import { diagSceneClass } from './diagnostics/diagSceneClass';
-
-async function delay(ms: number) {
-	return new Promise(resolve => setTimeout(resolve, ms));
-}
+import { generateGetterSetter } from './command/generateGetterSetter';
+import { GenerateGetterSetterCodeActionProvider } from './codeactions/GenerateGetterSetter';
+import { diagPropertyClass } from './diagnostics/diagSceneClass';
 
 // This method is called when the extension is activated
 export async function activate(context: vscode.ExtensionContext) {
-	await delay(10000); // wait activation of Language Support for Java
-	console.log('JavaFX Builder Class Generator extension is activated');
+	console.log('JavaFX Property Support extension is activated');
 
 	const workspaceFolders = vscode.workspace.workspaceFolders;
 	if (!workspaceFolders) {
@@ -22,53 +13,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
-	const txtResourceUri = vscode.Uri.joinPath(context.extensionUri, 'resources', 'constructor.txt');
-	try {
-		const data = await vscode.workspace.fs.readFile(txtResourceUri);
-		const content = new TextDecoder().decode(data);
-		content.split('\n').forEach(line => {
-			if (line.includes(':')) {
-				let [className, args] = line.split(':');
-				className = className.trim();
-				if (className) {
-					args = args.trim();
-					args.split(',').forEach(arg => {
-						arg = arg.trim();
-						let [type, param] = arg.split(' ');
-						type = type.trim();
-						param = param.trim();
-						if (type && param) {
-							if (!constructorMap[className]) {
-								constructorMap[className] = {};
-							}
-							if (!constructorMap[className][args]) {
-								constructorMap[className][args] = [{ type, param }];
-							}
-							else {
-								constructorMap[className][args].push({ type, param });
-							}
-						}
-					});
-				}
-			}
-		});
-	} catch (error) {
-		console.error('Error reading constructor.txt:', error);
-	}
-
 	async function checkAllJavaFiles() {
 		const files = await vscode.workspace.findFiles("**/*.java");
 		files.forEach(async uri => {
 			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(uri.fsPath));
-			if (uri.path.endsWith('module-info.java')) {
-				checkModule(document);
-			}
-			else {
-				diagSceneClass(document);
-			}
+			diagPropertyClass(document);
 		});
 	}
-
 
 	/**
 	 * Observe changes of *.java files.
@@ -78,57 +29,35 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Change of *.java file is detected when the file is saved.
 	javaWatcher.onDidChange(async uri => {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(uri.fsPath));
-		if (uri.path.endsWith('module-info.java')) {
-			checkModule(document);
-		}
-		else {
-			diagSceneClass(document);
-		}
+		diagPropertyClass(document);
 	});
 	javaWatcher.onDidCreate(async uri => {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(uri.fsPath));
-		if (uri.path.endsWith('module-info.java')) {
-			checkModule(document);
-		}
-		else {
-			diagSceneClass(document);
-		}
+		diagPropertyClass(document);
 	});
 	javaWatcher.onDidDelete(async uri => {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(uri.fsPath));
-		if (uri.path.endsWith('module-info.java')) {
-			deleteModule(document);
-		}
-		else {
-			diagSceneClass(document);
-		}
+		diagPropertyClass(document);
 	});
 
 	// A change to the .java file is detected if it is not saved.	
 	vscode.workspace.onDidChangeTextDocument(event => {
 		const document = event.document;
-		if (document.fileName === 'module-info.java') {
-			checkModule(document);
-		}
-		else if (document.languageId === 'java') {
-			diagSceneClass(document);
+		if (document.languageId === 'java') {
+			diagPropertyClass(document);
 		}
 	});
 
-
 	context.subscriptions.push(
-		vscode.languages.registerCodeActionsProvider('java', new BuilderClassCodeActionProvider(),
-			{ providedCodeActionKinds: BuilderClassCodeActionProvider.providedCodeActionKinds })
+		vscode.languages.registerCodeActionsProvider('java', new GenerateGetterSetterCodeActionProvider(),
+			{ providedCodeActionKinds: GenerateGetterSetterCodeActionProvider.providedCodeActionKinds })
 	);
 
-	/*
-	context.subscriptions.push(
-		vscode.languages.registerCodeLensProvider('java', new BuilderClassCodeLensProvider())
-	);
-	*/
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('javafx-builder-class-generator.generateBuilderClass', generateBuilderClass)
+		vscode.commands.registerCommand('javafx-builder-class-generator.generateGetterSetter', (document: vscode.TextDocument, range: vscode.Range) =>
+			generateGetterSetter(document, range)
+		)
 	);
 
 }

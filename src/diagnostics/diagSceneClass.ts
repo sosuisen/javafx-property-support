@@ -1,11 +1,8 @@
 import * as vscode from 'vscode';
-import { findMainClass } from '../util';
-import * as path from 'path';
-import * as fs from 'fs';
+import { getDeclarationElement } from '../command/declarationElement';
+const diagnosticCollection = vscode.languages.createDiagnosticCollection('javafx-property-diagnostic');
 
-const diagnosticCollection = vscode.languages.createDiagnosticCollection('scene-class-diagnostic');
-
-export async function diagSceneClass(document: vscode.TextDocument) {
+export async function diagPropertyClass(document: vscode.TextDocument) {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document !== document) {
         return;
@@ -16,62 +13,47 @@ export async function diagSceneClass(document: vscode.TextDocument) {
     for (let i = 0; i < document.lineCount; i++) {
         const line = document.lineAt(i).text;
 
-        const constructorPattern = /new\s+([\w.]+)\s*\(/;
-        const match = line.match(constructorPattern);
+        const propertyPattern = /\s*([\w.]+Property(?:<[\w,<> ]*>)?)\s+(\w+)\s*=\s*new\s+([\w.]+(?:<[\w,<> ]*>)?)\s*\(/;        // const constructorPattern = /^\s*(\w+)\s+([\w.<,>]+)\s*?=\s*?new\s+([\w.]+Property(<[\w,]*>)?)\s*\(/;
+        let match = line.match(propertyPattern);
 
-        if (match) {
-            // MyClass or my.package.MyClass
-            const targetClassFullName = match[1];
-            const classNamePattern = /new\s+[\w.]+?\.(\w+?)\s*\(/;
-            const classMatch = line.match(classNamePattern);
-            // MyClass
-            const targetClassNameOnly = classMatch ? classMatch[1] : targetClassFullName;
-            const classStartAt = line.indexOf(targetClassNameOnly + "(");
-            const classPosition = new vscode.Position(i, classStartAt + 1);
+        if (!match) {
+            const wrapperPattern = /\s*(ReadOnly[\w.]+Wrapper(?:<[\w,<> ]*>)?)\s+(\w+)\s*=\s*new\s+([\w.]+(?:<[\w,<> ]*>)?)\s*\(/;        // const constructorPattern = /^\s*(\w+)\s+([\w.<,>]+)\s*?=\s*?new\s+([\w.]+Property(<[\w,]*>)?)\s*\(/;
+            match = line.match(wrapperPattern);
+        }
 
-            // Get type definitions
-            try {
-                const typeDefinitions = await vscode.commands.executeCommand<vscode.Location[]>(
-                    'vscode.executeTypeDefinitionProvider',
-                    document.uri,
-                    classPosition
-                );
+        if (!match) {
+            continue;
+        }
+        const propertyFieldTypeName = match[1];
+        const propertyFieldName = match[2];
+        const propertyClassName = match[3];
 
-                // Show CodeLens only if new of javafx.scene.* Class is found
-                if (!typeDefinitions || typeDefinitions.length === 0 ||
-                    !typeDefinitions[0].uri.path.includes('javafx.scene')
-                ) {
-                    continue;
-                }
-
-                const mainClass = await findMainClass(document.uri);
-                if (!mainClass) {
-                    continue;
-                }
-                const mainClassPath = mainClass.filePath;
-                const mainClassDir = mainClassPath.substring(0, mainClassPath.lastIndexOf(path.sep));
-                const builderDirPath = `${mainClassDir}/jfxbuilder`;
-                const builderFilePath = `${builderDirPath}/${targetClassNameOnly}Builder.java`;
-                if (fs.existsSync(builderFilePath)) {
-                    continue;
-                }
-
-                const range = new vscode.Range(
-                    i,
-                    classStartAt,
-                    i,
-                    classStartAt + targetClassNameOnly.length
-                );
-
-
-
-                const message = 'Can generate builder class';
-                const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Hint);
-                diagnostics.push(diagnostic);
-
-            } catch (e) {
-                console.error(e);
+        if (propertyFieldName !== "") {
+            // Check if getter is already generated
+            const { propertyType, getterSetterTypeName, pojoFieldName, pojoFieldNameCapitalized } = getDeclarationElement(propertyFieldTypeName, propertyFieldName, propertyClassName);
+            let propertyGetterLine = "";
+            if (propertyType === "readOnlyBasicWrapper" || propertyType === "readOnlyObjectWrapper") {
+                propertyGetterLine = `public ${propertyFieldTypeName.replace("Wrapper", "Property")} ${pojoFieldName}Property`;
             }
+            else {
+                propertyGetterLine = `public ${propertyFieldTypeName} ${pojoFieldName}Property`;
+            }
+            if (document.getText().includes(propertyGetterLine)) {
+                continue;
+            }
+
+            const classStartAt = line.indexOf(propertyFieldName);
+            // Get type definitions
+            const range = new vscode.Range(
+                i,
+                classStartAt,
+                i,
+                classStartAt + propertyFieldName.length,
+            );
+
+            const message = 'Can generate getter and setter';
+            const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Hint);
+            diagnostics.push(diagnostic);
         }
         diagnosticCollection.set(document.uri, diagnostics);
     }

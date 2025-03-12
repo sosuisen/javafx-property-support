@@ -1,112 +1,153 @@
-# JavaFX Builder Class Generator
+# JavaFX Property Support
 
-This VSCode extension provides a code generator for creating builder classes in JavaFX projects.
+This VSCode extension provides a getter and setter generator for JavaFX properties.
 
-You can generate builder classes for various types included in the `javafx.scene.*` packages, such as `Button` and `VBox`,
-allowing you to create complex instances more compactly.
+## 1. 🏃‍➡️ Move the cursor over a property field name.
+- Hint dots (...) will appear under the field name when you can generate a getter and setter.
 
-<img src="images/builder_04.png" width="400">   
+<img src="images/hint.png" width="500">
 
-# How to Use
-
-## 1. 🏃‍➡️ Move the cursor over a "new ClassName()" expression.
-- The class must be from the `javafx.scene.*` packages.
-- The class name must be a canonical name or resolved through an import.
-- Hint dots(...) will appear under the ClassName when you can generate a builder class.
-
-<img src="images/hint.png" width="300">
-
-
-## 2. 🔧 Open the code action and select "Generate Builder Class".
+## 2. 🔧 Open the code action and select "Generate Getter and Setter."
 
 - You can open the code action by pressing 'Ctrl+.' (or 'Cmd+.' on Mac).
 
-<img src="images/codeaction.png" width="400">
+<img src="images/codeaction.png" width="500">
 
-- A builder class will be generated and will replace the original class at the cursor position.
-- A builder class cannot be generated if the class does not have any "set-" methods.
 
-<img src="images/builder_02.png" width="320">
+## 3. 🎁 Getter and setter are created at the end of the class block.
 
-## 3. 🎁 A builder class is created under the jfxbuilder directory.
+<img src="images/result.png" width="500">
 
-- The builder class is named by appending the postfix "-Builder" to the original class name.
+# Generation Rules
 
-<img src="images/builder_03.png" width="300">
+- A property getter, a general getter, and a general setter are generated.
+- The method name is automatically derived from the private property field name. 
+  - "private StringProperty title" -> "public String getTitle()"
+- However, if the field name ends with a string that starts with "Prop," that portion is ignored.
+  - "private StringProperty nameProp" -> "public String getName()"
+  - "private StringProperty nameProperty" -> "public String getName()"
+- A read-only wrapper does not generate a setter.
+- ObjectProperty<T> is unboxed when possible.
+  - "private ObjectProperty<Integer> priority" -> "public int getPriority()"
 
-## 4. ⚙️ The builder class includes the same setter methods as the original class, but the "set-" prefix is omitted.
-
-- In the example below, the builder class for the `Button` class is `ButtonBuilder`, which includes a `maxSize` method instead of the `setMaxSize` method.
-
-- The return type of the `maxSize` method is `ButtonBuilder`.
-
-- To create an instance of the original class, call `build()` at the end of the method chain.
-
-<img src="images/builder_04.png" width="400">   
-
-# Example
-
-<img src="images/example_01.png" width="500">
-
-<img src="images/example_02.png" width="200">
-
-## `children` method
-
-A builder class for a class that has a `getChildren` method includes a `children` method.
-
-Usage follows the example provided above.
+# Examples
 
 ```java
-public VBoxBuilder children(Node... elements) { in.getChildren().setAll(elements); return this; }
+private final StringProperty title = new SimpleStringProperty();
+
+// title
+public StringProperty titleProperty() {
+	return title;
+}
+
+public String getTitle () {
+	 return title.get();
+}
+
+public void setTitle (String title) {
+	 this.title.set(title);
+}
 ```
-
-## `apply` method
-
-All builder classes have an `apply` method. 
-You can pass a lambda that takes an instance of the original class as an argument to this method.
-
-Usage follows the example provided above.
 
 ```java
-public LabelBuilder apply(java.util.function.Consumer<Label> func) {
-        func.accept((Label) in);
-        return this;
-    }
+private final StringProperty nameProp = new SimpleStringProperty();
+
+// name
+public StringProperty nameProperty() {
+	return nameProp;
+}
+
+public String getName() {
+	return nameProp.get();
+}
+
+public void setName(String name) {
+	this.nameProp.set(name);
+}
 ```
+```java
+private final BooleanProperty completed = new SimpleBooleanProperty();
 
-In fact, everything can be accomplished with `apply`. The other methods in the builder class simply provide syntactic sugar for the original class's `set-` methods and the `getChildren` method.
+// completed
+public BooleanProperty completedProperty() {
+	return completed;
+}
 
-# Miscellaneous
+public boolean isCompleted() {
+	return completed.get();
+}
 
-## Requirements
+public void setCompleted(boolean completed) {
+	this.completed.set(completed);
+}
+```
+```java
+private final ObjectProperty<LocalDate> date = new SimpleObjectProperty<>();
+	
+// date
+public ObjectProperty<LocalDate> dateProperty() {
+	return date;
+}
 
-- The Java files must be located somewhere under the `src` directory, e.g., `src/main/java/com/example/FooController.java`
-- Install the "Language Support for Java(TM) by Red Hat" extension to enable the builder class generator.
-- A module-info.java file is required.
-- A class that extends `javafx.application.Application` is needed.
+public LocalDate getDate() {
+	return date.get();
+}
 
-## Issues
+public void setDate(LocalDate date) {
+	this.date.set(date);
+}
+```
+```java
+private final ObjectProperty<Integer> priority = new SimpleObjectProperty<>();
+// priority
+public ObjectProperty<Integer> priorityProperty() {
+	return priority;
+}
 
-- This plugin will not function unless the "Language Support for Java™ by Red Hat" extension is activated. If you encounter any issues, first ensure that this extension has been successfully activated.
+public int getPriority() {
+	return priority.get();
+}
 
-- If you experience any problems with the JavaFX Builder Class Generator, please create an issue in the GitHub repository.
-https://github.com/sosuisen/javafx-builder-class-generator/issues
+public void setPriority(int priority) {
+	this.priority.set(priority);
+}
+```
+```java
+private final ReadOnlyStringWrapper readOnlyTitle = new ReadOnlyStringWrapper();
 
-## Release Notes
+// readOnlyTitle
+public ReadOnlyStringProperty readOnlyTitleProperty() {
+	return readOnlyTitle.getReadOnlyProperty();
+}
 
-### 1.2.0
+public String getReadOnlyTitle() {
+	return readOnlyTitle.get();
+}
+```
+```java
+private final MapProperty<String, String> dataMap = new SimpleMapProperty<>(FXCollections.observableHashMap());
 
-- Added hint dots(...) under the ClassName when a builder class can be generated.
-- Removed code lens; use code action instead.
+// dataMap
+public MapProperty<String, String> dataMapProperty() {
+	return dataMap;
+}
 
-### 1.1.0
+public ObservableMap<String, String> getDataMap() {
+	return dataMap.get();
+}
 
-- Added `apply` method to the builder class.
-- Use `create` method to create a builder instance instead of using a constructor.
-- Added `children` method if the original class has a `getChildren` method.
-- The `create` method has parameters if the original constructor has parameters.
-- Added methods to set parameters indicated in the original constructor.
+public void setDataMap(ObservableMap<String, String> dataMap) {
+	this.dataMap.set(dataMap);
+}
+```
+```java
+private final ReadOnlyMapWrapper<String, String> readOnlyDataMap = new ReadOnlyMapWrapper<>(dataMap);
+	// readOnlyDataMap
+	public ReadOnlyMapProperty<String, String> readOnlyDataMapProperty() {
+		return readOnlyDataMap.getReadOnlyProperty();
+	}
 
-### 1.0.0
-
-- Initial release.
+	public ObservableMap<String, String> getReadOnlyDataMap() {
+		return readOnlyDataMap.get();
+	}
+```

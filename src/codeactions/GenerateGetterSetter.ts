@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-export class BuilderClassCodeActionProvider implements vscode.CodeActionProvider {
+export class GenerateGetterSetterCodeActionProvider implements vscode.CodeActionProvider {
     public provideCodeActions(
         document: vscode.TextDocument,
         range: vscode.Range,
@@ -8,16 +8,16 @@ export class BuilderClassCodeActionProvider implements vscode.CodeActionProvider
         token: vscode.CancellationToken
     ): vscode.CodeAction[] {
         return context.diagnostics
-            .filter(diagnostic => diagnostic.message.startsWith('Can generate builder class'))
+            .filter(diagnostic => diagnostic.message.startsWith('Can generate getter and setter'))
             .map(diagnostic => this.createFix(document, diagnostic));
 
     }
 
     private createFix(document: vscode.TextDocument, diagnostic: vscode.Diagnostic): vscode.CodeAction {
-        const fix = new vscode.CodeAction('Generate Builder Class', vscode.CodeActionKind.QuickFix);
+        const fix = new vscode.CodeAction('Generate Getter and Setter', vscode.CodeActionKind.QuickFix);
         fix.command = {
-            command: 'javafx-builder-class-generator.generateBuilderClass',
-            title: 'Generate Builder Class',
+            command: 'javafx-builder-class-generator.generateGetterSetter',
+            title: 'Generate Getter and Setter',
             arguments: [document, diagnostic.range]
         };
         return fix;

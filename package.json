@@ -1,14 +1,14 @@
 {
-  "name": "javafx-builder-class-generator",
-  "displayName": "JavaFX Builder Class Generator",
-  "description": "Builder class generator for JavaFX projects.",
+  "name": "javafx-property-support",
+  "displayName": "JavaFX Property Support",
+  "description": "Property support for JavaFX projects.",
   "publisher": "sosuisha",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sosuisen/javafx-builder-class-generator"
+    "url": "https://github.com/sosuisen/javafx-property-support"
   },
   "icon": "images/icon.png",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.96.0"
   },
@@ -19,9 +19,6 @@
     "onLanguage:java"
   ],
   "main": "./out/extension.js",
-  "extensionDependencies": [
-    "redhat.java"
-  ],
   "contributes": {
     "languages": [
       {
@@ -54,8 +51,5 @@
     "@vscode/test-electron": "^2.4.1",
     "eslint": "^9.16.0",
     "typescript": "^5.7.2"
-  },
-  "dependencies": {
-    "vscode-languageclient": "^9.0.1"
   }
 }
